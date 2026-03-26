@@ -1,0 +1,492 @@
+/* Основной интерфейс SpacEdu внутри кабинета */
+.ms-wrap {
+  --ms-green: #4caf50;
+  --ms-green-hover: #43a047;
+  --ms-green-dark: #2e7d32;
+  --ms-page: #2e2e32;
+  --ms-card: #ffffff;
+  --ms-border: #e0e0e0;
+  min-height: calc(100svh - 0px);
+  padding: 24px 16px 100px;
+  background: var(--ms-page);
+  box-sizing: border-box;
+}
+
+.ms-panel {
+  max-width: 1200px;
+  margin: 0 auto;
+  background: var(--ms-card);
+  border: 1px solid var(--ms-border);
+  border-radius: 16px;
+  box-shadow: 0 12px 48px rgba(0, 0, 0, 0.45);
+  overflow: hidden;
+  color: var(--ms-green-dark);
+}
+
+.ms-topbar {
+  border-bottom: 1px solid var(--ms-border);
+  background: var(--ms-card);
+}
+
+.ms-topbar-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  flex-wrap: wrap;
+  padding: 14px 24px 16px;
+}
+
+.ms-topbar-left,
+.ms-topbar-right {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  flex-wrap: wrap;
+}
+
+.ms-brand {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  font-weight: 800;
+  font-size: 1.15rem;
+  color: var(--ms-green-dark);
+  text-decoration: none;
+}
+
+.ms-brand-mark {
+  color: var(--ms-green);
+  font-size: 1.1rem;
+}
+
+.ms-pill {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 16px;
+  border-radius: 999px;
+  background: var(--ms-card);
+  color: var(--ms-green-dark);
+  font-weight: 600;
+  font-size: 13px;
+  text-decoration: none;
+  border: 1px solid var(--ms-green);
+}
+
+.ms-pill:hover {
+  background: rgba(76, 175, 80, 0.1);
+}
+
+.ms-link {
+  font-weight: 600;
+  font-size: 14px;
+  color: var(--ms-green-dark);
+  text-decoration: none;
+  padding: 8px 4px;
+}
+
+.ms-link:hover {
+  color: var(--ms-green);
+  text-decoration: underline;
+  text-underline-offset: 3px;
+}
+
+.ms-profile {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  padding: 6px 10px;
+  border: none;
+  border-radius: 999px;
+  background: transparent;
+  font: inherit;
+  font-weight: 600;
+  font-size: 13px;
+  color: var(--ms-green-dark);
+  cursor: pointer;
+  text-decoration: none;
+}
+
+.ms-profile:hover {
+  background: rgba(76, 175, 80, 0.08);
+}
+
+.ms-avatar {
+  width: 32px;
+  height: 32px;
+  border-radius: 50%;
+  background: linear-gradient(145deg, #e8f5e9 0%, var(--ms-green) 55%, var(--ms-green-dark) 100%);
+  border: 2px solid var(--ms-green);
+}
+
+.ms-btn-logout {
+  padding: 8px 16px;
+  border-radius: 999px;
+  border: 1px solid var(--ms-border);
+  background: var(--ms-card);
+  color: var(--ms-green-dark);
+  font-weight: 600;
+  font-size: 13px;
+  cursor: pointer;
+  font-family: inherit;
+}
+
+.ms-btn-logout:hover {
+  background: rgba(76, 175, 80, 0.08);
+}
+
+.ms-main {
+  padding: 28px 28px 32px;
+}
+
+.ms-back {
+  margin-bottom: 20px;
+}
+
+.ms-back-btn {
+  padding: 8px 0;
+  border: none;
+  background: none;
+  font: inherit;
+  font-weight: 600;
+  font-size: 14px;
+  color: var(--ms-green-dark);
+  cursor: pointer;
+  text-decoration: underline;
+  text-underline-offset: 3px;
+}
+
+.ms-back-btn:hover {
+  color: var(--ms-green);
+}
+
+.ms-grid {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: 16px;
+}
+
+@media (max-width: 1100px) {
+  .ms-grid {
+    grid-template-columns: repeat(2, 1fr);
+  }
+}
+
+@media (max-width: 560px) {
+  .ms-grid {
+    grid-template-columns: 1fr;
+  }
+}
+
+.ms-card {
+  position: relative;
+  border-radius: 14px;
+  padding: 20px 16px 18px;
+  min-height: 220px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  text-align: center;
+  background: var(--ms-card);
+  border: 1px solid var(--ms-border);
+  box-shadow: 0 2px 12px rgba(0, 0, 0, 0.06);
+}
+
+.ms-card-glyph {
+  flex: 1;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 52px;
+  font-weight: 800;
+  color: var(--ms-green);
+  margin-bottom: 8px;
+}
+
+.ms-card h3 {
+  margin: 0 0 12px;
+  font-size: 12px;
+  line-height: 1.35;
+  font-weight: 800;
+  letter-spacing: 0.03em;
+  color: var(--ms-green-dark);
+  padding: 0 4px;
+}
+
+.ms-card-btn {
+  padding: 10px 22px;
+  border-radius: 999px;
+  border: 2px solid var(--ms-green);
+  font-family: inherit;
+  font-weight: 800;
+  font-size: 11px;
+  letter-spacing: 0.08em;
+  cursor: pointer;
+  background: var(--ms-card);
+  color: var(--ms-green-dark);
+}
+
+.ms-card-btn:hover:not(:disabled) {
+  background: rgba(76, 175, 80, 0.12);
+}
+
+.ms-card-btn:disabled {
+  opacity: 0.45;
+  cursor: not-allowed;
+}
+
+.ms-placeholder {
+  background: var(--ms-card);
+  border-radius: 14px;
+  padding: 48px 24px;
+  text-align: center;
+  border: 1px solid var(--ms-border);
+}
+
+.ms-placeholder h2 {
+  margin: 0 0 8px;
+  font-size: 20px;
+  color: var(--ms-green-dark);
+}
+
+.ms-placeholder p {
+  margin: 0;
+  color: #388e3c;
+  font-size: 14px;
+}
+
+/* Карта курса — квадратный блок, картинка на весь квадрат */
+.ms-map {
+  position: relative;
+  margin: 0 auto;
+  width: 100%;
+  max-width: 100%;
+  aspect-ratio: 1 / 1;
+  border-radius: 14px;
+  overflow: hidden;
+  border: 1px solid var(--ms-border);
+  background: var(--ms-card);
+}
+
+.ms-map-img {
+  display: block;
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  object-position: center;
+}
+
+.ms-map-hits {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+}
+
+.ms-map-hit {
+  position: absolute;
+  width: clamp(36px, 9vw, 52px);
+  height: clamp(36px, 9vw, 52px);
+  margin-left: calc(clamp(36px, 9vw, 52px) / -2);
+  margin-top: calc(clamp(36px, 9vw, 52px) / -2);
+  padding: 0;
+  border: none;
+  border-radius: 50%;
+  cursor: pointer;
+  pointer-events: auto;
+  background: transparent;
+  transition: box-shadow 0.15s, background 0.15s;
+}
+
+.ms-map-hit:hover,
+.ms-map-hit:focus-visible {
+  background: rgba(255, 255, 255, 0.18);
+  box-shadow: 0 0 0 2px rgba(255, 255, 255, 0.75);
+  outline: none;
+}
+
+.ms-map-hit:focus-visible {
+  box-shadow: 0 0 0 3px var(--ms-green);
+}
+
+.ms-map-hit--asgard {
+  width: calc(clamp(52px, 13vw, 80px) + 7px);
+  height: calc(clamp(52px, 13vw, 80px) + 7px);
+  margin-left: calc((clamp(52px, 13vw, 80px) + 7px) / -2);
+  margin-top: calc((clamp(52px, 13vw, 80px) + 7px) / -2);
+  animation: ms-map-asgard-pulse 2.2s ease-in-out infinite;
+}
+
+.ms-map-hit--asgard:hover,
+.ms-map-hit--asgard:focus-visible {
+  animation: none;
+}
+
+@keyframes ms-map-asgard-pulse {
+  0%,
+  100% {
+    box-shadow: 0 0 0 0 rgba(76, 175, 80, 0.45);
+  }
+  50% {
+    box-shadow: 0 0 0 12px rgba(76, 175, 80, 0);
+  }
+}
+
+/* Модальное окно урока */
+.ms-modal-backdrop {
+  position: fixed;
+  inset: 0;
+  z-index: 300;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 20px;
+  background: rgba(0, 0, 0, 0.55);
+  animation: ms-fade-in 0.2s ease;
+}
+
+@keyframes ms-fade-in {
+  from {
+    opacity: 0;
+  }
+  to {
+    opacity: 1;
+  }
+}
+
+.ms-modal {
+  position: relative;
+  width: 100%;
+  max-width: 420px;
+  padding: 28px 24px 24px;
+  border-radius: 16px;
+  background: var(--ms-card);
+  border: 1px solid var(--ms-border);
+  box-shadow: 0 24px 64px rgba(0, 0, 0, 0.35);
+  color: var(--ms-green-dark);
+  text-align: left;
+}
+
+.ms-modal-close {
+  position: absolute;
+  top: 12px;
+  right: 14px;
+  width: 36px;
+  height: 36px;
+  border: none;
+  border-radius: 10px;
+  background: transparent;
+  font-size: 26px;
+  line-height: 1;
+  color: #757575;
+  cursor: pointer;
+  font-family: inherit;
+}
+
+.ms-modal-close:hover {
+  background: rgba(0, 0, 0, 0.06);
+  color: var(--ms-green-dark);
+}
+
+.ms-modal-title {
+  margin: 0 32px 12px 0;
+  font-size: 1.5rem;
+  font-weight: 800;
+  letter-spacing: -0.02em;
+  color: var(--ms-green-dark);
+}
+
+.ms-modal-text {
+  margin: 0 0 14px;
+  font-size: 15px;
+  line-height: 1.5;
+  color: #424242;
+}
+
+.ms-modal-offer {
+  margin: 0 0 22px;
+  font-size: 15px;
+  font-weight: 600;
+  line-height: 1.45;
+  color: var(--ms-green-dark);
+}
+
+.ms-modal-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+}
+
+.ms-modal-cta {
+  flex: 1;
+  min-width: 140px;
+  padding: 12px 20px;
+  border: none;
+  border-radius: 999px;
+  background: var(--ms-green);
+  color: #fff;
+  font-family: inherit;
+  font-weight: 700;
+  font-size: 15px;
+  cursor: pointer;
+}
+
+.ms-modal-cta:hover {
+  background: #43a047;
+}
+
+.ms-modal-secondary {
+  padding: 12px 20px;
+  border-radius: 999px;
+  border: 2px solid var(--ms-border);
+  background: var(--ms-card);
+  color: var(--ms-green-dark);
+  font-family: inherit;
+  font-weight: 600;
+  font-size: 15px;
+  cursor: pointer;
+}
+
+.ms-modal-secondary:hover {
+  background: rgba(76, 175, 80, 0.08);
+}
+
+.ms-help {
+  position: fixed;
+  bottom: 24px;
+  right: 24px;
+  width: 56px;
+  height: 56px;
+  border-radius: 50%;
+  border: 2px solid var(--ms-green);
+  background: var(--ms-card);
+  color: var(--ms-green-dark);
+  font-size: 22px;
+  font-weight: 700;
+  cursor: pointer;
+  box-shadow: 0 8px 28px rgba(0, 0, 0, 0.45);
+  z-index: 50;
+  font-family: inherit;
+}
+
+.ms-help:hover {
+  background: rgba(76, 175, 80, 0.12);
+}
+
+.ms-help-badge {
+  position: absolute;
+  top: -4px;
+  right: -4px;
+  min-width: 22px;
+  height: 22px;
+  padding: 0 6px;
+  border-radius: 999px;
+  background: #c62828;
+  color: #fff;
+  font-size: 11px;
+  font-weight: 800;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border: 2px solid var(--ms-card);
+}
