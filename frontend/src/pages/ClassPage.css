@@ -1,0 +1,656 @@
+/* Страница «Мой класс» */
+.cp-wrap {
+  --cp-green: #4caf50;
+  --cp-green-dark: #1b5e20;
+  --cp-page: #2a2d32;
+  --cp-card: #ffffff;
+  --cp-border: #e3e6e8;
+  min-height: 100svh;
+  padding: 24px 16px 48px;
+  box-sizing: border-box;
+  font-family: system-ui, -apple-system, 'Segoe UI', Roboto, 'Helvetica Neue', Arial,
+    sans-serif;
+  background:
+    radial-gradient(ellipse 100% 70% at 50% -15%, rgba(102, 187, 106, 0.18), transparent 52%),
+    radial-gradient(ellipse 55% 45% at 100% 100%, rgba(67, 160, 71, 0.12), transparent 50%),
+    var(--cp-page);
+}
+
+.cp-panel {
+  max-width: min(1600px, calc(100vw - 32px));
+  margin: 0 auto;
+  background: var(--cp-card);
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  border-radius: 20px;
+  box-shadow:
+    0 1px 2px rgba(0, 0, 0, 0.04),
+    0 20px 50px rgba(0, 0, 0, 0.32);
+  overflow: hidden;
+  color: var(--cp-green-dark);
+}
+
+.cp-top {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  flex-wrap: wrap;
+  padding: 16px 24px;
+  border-bottom: 1px solid var(--cp-border);
+}
+
+.cp-back {
+  font-weight: 600;
+  font-size: 14px;
+  color: var(--cp-green-dark);
+  text-decoration: none;
+}
+
+.cp-back:hover {
+  color: var(--cp-green);
+  text-decoration: underline;
+  text-underline-offset: 3px;
+}
+
+.cp-title {
+  margin: 0;
+  font-size: 1.35rem;
+  font-weight: 800;
+  letter-spacing: -0.02em;
+}
+
+.cp-sub {
+  margin: 4px 0 0;
+  font-size: 13px;
+  color: #388e3c;
+  opacity: 0.95;
+}
+
+.cp-meta {
+  text-align: right;
+}
+
+.cp-main {
+  padding: 24px 24px 32px;
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 20px;
+  align-items: start;
+}
+
+@media (max-width: 1200px) {
+  .cp-main {
+    grid-template-columns: 1fr;
+  }
+}
+
+.cp-section {
+  border: 1px solid var(--cp-border);
+  border-radius: 14px;
+  overflow: hidden;
+  background: var(--cp-card);
+}
+
+.cp-section-head {
+  padding: 14px 18px;
+  background: rgba(76, 175, 80, 0.08);
+  border-bottom: 1px solid var(--cp-border);
+}
+
+.cp-section-title {
+  margin: 0;
+  font-size: 15px;
+  font-weight: 800;
+  letter-spacing: 0.02em;
+  color: var(--cp-green-dark);
+}
+
+.cp-section-hint {
+  margin: 4px 0 0;
+  font-size: 12px;
+  color: #558b2f;
+}
+
+.cp-section-body {
+  padding: 8px 0;
+}
+
+/* Leaderboard */
+.cp-lb-row {
+  display: grid;
+  grid-template-columns: 44px 1fr auto;
+  align-items: center;
+  gap: 12px;
+  padding: 12px 18px;
+  border-bottom: 1px solid var(--cp-border);
+}
+
+.cp-lb-row:last-child {
+  border-bottom: none;
+}
+
+.cp-lb-row--me {
+  background: rgba(76, 175, 80, 0.12);
+}
+
+.cp-rank {
+  width: 36px;
+  height: 36px;
+  border-radius: 10px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-weight: 800;
+  font-size: 14px;
+  background: #f5f5f5;
+  color: var(--cp-green-dark);
+}
+
+.cp-rank--1 {
+  background: linear-gradient(145deg, #fff9e6, #ffd54f);
+  color: #b8860b;
+}
+
+.cp-rank--2 {
+  background: linear-gradient(145deg, #fafafa, #e0e0e0);
+  color: #616161;
+}
+
+.cp-rank--3 {
+  background: linear-gradient(145deg, #fff3e0, #ffcc80);
+  color: #e65100;
+}
+
+.cp-lb-name {
+  font-weight: 600;
+  font-size: 14px;
+  color: #1b5e20;
+}
+
+.cp-lb-points {
+  font-weight: 800;
+  font-size: 14px;
+  color: var(--cp-green-dark);
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+
+.cp-lb-unit {
+  font-weight: 600;
+  font-size: 12px;
+  opacity: 0.75;
+}
+
+.cp-bar {
+  grid-column: 1 / -1;
+  height: 4px;
+  background: #eee;
+  border-radius: 4px;
+  margin-top: 4px;
+  overflow: hidden;
+}
+
+.cp-bar-fill {
+  height: 100%;
+  border-radius: 4px;
+  background: linear-gradient(90deg, var(--cp-green), var(--cp-green-dark));
+}
+
+/* Список класса */
+.cp-class-row {
+  display: grid;
+  grid-template-columns: 40px 1fr auto;
+  align-items: center;
+  gap: 14px;
+  padding: 12px 18px;
+  border-bottom: 1px solid var(--cp-border);
+}
+
+.cp-class-row:last-child {
+  border-bottom: none;
+}
+
+.cp-class-row--me {
+  background: rgba(76, 175, 80, 0.1);
+}
+
+.cp-num {
+  font-size: 13px;
+  font-weight: 700;
+  color: #757575;
+  font-variant-numeric: tabular-nums;
+}
+
+.cp-avatar {
+  width: 40px;
+  height: 40px;
+  border-radius: 50%;
+  background: linear-gradient(135deg, #c8e6c9, var(--cp-green));
+  flex-shrink: 0;
+}
+
+.cp-class-info {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  min-width: 0;
+}
+
+.cp-class-name {
+  font-weight: 600;
+  font-size: 14px;
+  color: #1b5e20;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.cp-badge {
+  font-size: 11px;
+  font-weight: 700;
+  padding: 3px 8px;
+  border-radius: 999px;
+  background: rgba(76, 175, 80, 0.2);
+  color: var(--cp-green-dark);
+  white-space: nowrap;
+}
+
+.cp-badge--muted {
+  background: #f5f5f5;
+  color: #757575;
+}
+
+.cp-class-pts {
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--cp-green-dark);
+  font-variant-numeric: tabular-nums;
+}
+
+/* Вступление по коду: превью и шаги */
+.cp-join-body {
+  padding: 16px 18px 18px;
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+}
+
+.cp-join-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+  align-items: flex-start;
+}
+
+.cp-join-input {
+  flex: 1 1 220px;
+  max-width: 320px;
+  font-size: 18px;
+  font-weight: 700;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  font-family: var(--mono, ui-monospace, monospace);
+}
+
+.cp-join-preview {
+  margin: 0;
+  padding: 14px 16px;
+  border-radius: 12px;
+  background: rgba(76, 175, 80, 0.1);
+  border: 1px solid rgba(76, 175, 80, 0.35);
+  color: var(--cp-green-dark);
+  font-size: 14px;
+  line-height: 1.45;
+}
+
+.cp-join-preview strong {
+  display: block;
+  font-size: 1.05rem;
+  margin-bottom: 4px;
+}
+
+.cp-my-classes {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin: 0 0 4px;
+  padding: 0;
+  list-style: none;
+}
+
+.cp-my-classes li {
+  margin: 0;
+}
+
+.cp-my-class-pill {
+  display: inline-block;
+  padding: 6px 12px;
+  border-radius: 999px;
+  font-size: 12px;
+  font-weight: 700;
+  background: rgba(76, 175, 80, 0.18);
+  color: var(--cp-green-dark);
+  border: 1px solid var(--cp-border);
+}
+
+/* Кабинет учителя — сетка на том же фоне, что кабинет ученика */
+.cp-teacher-head {
+  padding: 16px 24px;
+  border-bottom: 1px solid var(--cp-border);
+}
+
+.cp-teacher-grid {
+  display: grid;
+  grid-template-columns: minmax(220px, 280px) 1fr;
+  gap: 28px;
+  padding: 24px;
+  align-items: start;
+}
+
+@media (max-width: 768px) {
+  .cp-teacher-grid {
+    grid-template-columns: 1fr;
+  }
+}
+
+.cp-teacher-side .cp-teacher-form {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  margin-bottom: 18px;
+}
+
+.cp-teacher-class-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.cp-teacher-class-btn {
+  width: 100%;
+  text-align: left;
+  padding: 12px 14px;
+  border-radius: 12px;
+  border: 1px solid var(--cp-border);
+  background: #fafdfb;
+  color: var(--cp-green-dark);
+  font: inherit;
+  font-weight: 600;
+  cursor: pointer;
+  transition:
+    border-color 0.15s,
+    background 0.15s;
+}
+
+.cp-teacher-class-btn:hover {
+  border-color: var(--cp-green);
+  background: rgba(76, 175, 80, 0.08);
+}
+
+.cp-teacher-class-btn--on {
+  border-color: var(--cp-green);
+  background: rgba(76, 175, 80, 0.14);
+  box-shadow: 0 0 0 1px rgba(76, 175, 80, 0.2);
+}
+
+.cp-teacher-h2 {
+  margin: 0 0 12px;
+  font-size: 1.05rem;
+  font-weight: 800;
+  color: var(--cp-green-dark);
+}
+
+.cp-teacher-h3 {
+  margin: 0 0 8px;
+  font-size: 0.95rem;
+  font-weight: 800;
+  color: var(--cp-green-dark);
+}
+
+.cp-teacher-block {
+  margin-bottom: 26px;
+}
+
+.cp-teacher-class-main-layout {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(240px, 320px);
+  gap: 24px;
+  align-items: start;
+}
+
+@media (max-width: 900px) {
+  .cp-teacher-class-main-layout {
+    grid-template-columns: 1fr;
+  }
+
+  .cp-teacher-students-aside {
+    order: -1;
+  }
+}
+
+.cp-teacher-class-primary {
+  min-width: 0;
+}
+
+.cp-teacher-students-aside {
+  position: sticky;
+  top: 16px;
+  padding: 14px 16px;
+  border: 1px solid var(--cp-border);
+  border-radius: 14px;
+  background: linear-gradient(180deg, #fafdfb 0%, #f5faf5 100%);
+}
+
+.cp-teacher-students-aside .cp-teacher-h3 {
+  margin-bottom: 10px;
+}
+
+.cp-teacher-table-wrap {
+  overflow-x: auto;
+  margin: 0 -4px;
+  border-radius: 10px;
+  border: 1px solid var(--cp-border);
+  background: #fff;
+}
+
+.cp-teacher-students-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 13px;
+  color: var(--cp-green-dark);
+}
+
+.cp-teacher-students-table th,
+.cp-teacher-students-table td {
+  padding: 10px 12px;
+  text-align: left;
+  border-bottom: 1px solid var(--cp-border);
+}
+
+.cp-teacher-students-table thead th {
+  font-size: 11px;
+  font-weight: 800;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  color: #558b2f;
+  background: rgba(76, 175, 80, 0.08);
+}
+
+.cp-teacher-students-table tbody tr:last-child td {
+  border-bottom: none;
+}
+
+.cp-teacher-th-num,
+.cp-teacher-td-num {
+  text-align: right;
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+
+.cp-teacher-assignments-list {
+  list-style: none;
+  margin: 8px 0 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.cp-teacher-assignment-row {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 12px 14px;
+  border: 1px solid var(--cp-border);
+  border-radius: 12px;
+  background: #fafdfb;
+}
+
+.cp-teacher-assignment-body {
+  min-width: 0;
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.cp-teacher-assignment-title {
+  font-weight: 600;
+  font-size: 14px;
+  color: var(--cp-green-dark);
+  line-height: 1.35;
+}
+
+.cp-teacher-assignment-meta {
+  display: block;
+  margin: 0;
+  font-size: 12px;
+}
+
+.cp-teacher-assignment-delete {
+  flex-shrink: 0;
+  padding: 6px 12px;
+  border-radius: 8px;
+  border: 1px solid rgba(211, 47, 47, 0.45);
+  background: #fff;
+  color: #c62828;
+  font: inherit;
+  font-size: 12px;
+  font-weight: 700;
+  cursor: pointer;
+  transition:
+    background 0.15s,
+    border-color 0.15s;
+}
+
+.cp-teacher-assignment-delete:hover:not(:disabled) {
+  background: rgba(211, 47, 47, 0.08);
+  border-color: #c62828;
+}
+
+.cp-teacher-assignment-delete:disabled {
+  opacity: 0.55;
+  cursor: not-allowed;
+}
+
+.cp-teacher-muted {
+  margin: 0 0 10px;
+  font-size: 13px;
+  color: #558b2f;
+  line-height: 1.45;
+}
+
+.cp-teacher-code-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+  align-items: center;
+}
+
+.cp-teacher-code {
+  flex: 1 1 200px;
+  padding: 14px 18px;
+  border-radius: 12px;
+  background: linear-gradient(180deg, #f1f8e9 0%, #e8f5e9 100%);
+  border: 2px dashed rgba(76, 175, 80, 0.45);
+  font: 700 1.35rem/1.2 ui-monospace, Consolas, monospace;
+  letter-spacing: 0.18em;
+  color: var(--cp-green-dark);
+  text-align: center;
+}
+
+.cp-teacher-token-details {
+  margin-top: 12px;
+  font-size: 12px;
+  color: #757575;
+}
+
+.cp-teacher-token-details summary {
+  cursor: pointer;
+  color: var(--cp-green-dark);
+  font-weight: 600;
+}
+
+.cp-teacher-token-long {
+  display: block;
+  margin-top: 8px;
+  padding: 10px;
+  word-break: break-all;
+  font: 12px/1.4 ui-monospace, monospace;
+  background: #f5f5f5;
+  border-radius: 8px;
+  color: #424242;
+}
+
+.cp-teacher-students,
+.cp-teacher-assignments {
+  margin: 8px 0 0;
+  padding-left: 1.2rem;
+  color: var(--cp-green-dark);
+  font-size: 14px;
+}
+
+.cp-teacher-assign {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  max-width: 440px;
+  margin-top: 10px;
+}
+
+.cp-teacher-label {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--cp-green-dark);
+}
+
+.cp-teacher-alerts {
+  padding: 0 24px 16px;
+}
+
+.cp-teacher-banner {
+  margin: 0 0 8px;
+  padding: 10px 14px;
+  border-radius: 10px;
+  background: rgba(76, 175, 80, 0.12);
+  border: 1px solid rgba(76, 175, 80, 0.35);
+  color: var(--cp-green-dark);
+  font-size: 14px;
+}
+
+.cp-teacher-err {
+  margin: 0;
+  padding: 10px 14px;
+  border-radius: 10px;
+  background: rgba(211, 47, 47, 0.08);
+  border: 1px solid rgba(211, 47, 47, 0.35);
+  color: #c62828;
+  font-size: 14px;
+}

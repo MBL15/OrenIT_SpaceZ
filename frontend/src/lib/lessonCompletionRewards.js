@@ -1,0 +1,3 @@
+/** Дефолты как в app/core.py: LESSON_COMPLETION_XP, LESSON_COMPLETION_COINS */
+export const LESSON_COMPLETION_XP = 100
+export const LESSON_COMPLETION_COINS = 10

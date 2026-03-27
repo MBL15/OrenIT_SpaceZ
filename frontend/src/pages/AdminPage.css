@@ -1,0 +1,155 @@
+.ap-toolbar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  flex-wrap: wrap;
+  margin-bottom: 8px;
+}
+
+.ap-table-wrap {
+  margin-top: 16px;
+  overflow-x: auto;
+  border: 1px solid var(--cp-border);
+  border-radius: 12px;
+  background: #fafdfb;
+}
+
+.ap-users-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 14px;
+  color: var(--cp-green-dark);
+}
+
+.ap-users-table th,
+.ap-users-table td {
+  text-align: left;
+  padding: 10px 12px;
+  border-bottom: 1px solid var(--cp-border);
+  vertical-align: top;
+}
+
+.ap-users-table th {
+  font-weight: 700;
+  font-size: 12px;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  color: #558b2f;
+  background: rgba(76, 175, 80, 0.06);
+}
+
+.ap-users-table tbody tr:last-child td {
+  border-bottom: none;
+}
+
+.ap-users-table tbody tr:hover {
+  background: rgba(76, 175, 80, 0.04);
+}
+
+.ap-role-select {
+  min-width: 168px;
+}
+
+.ap-admin-body {
+  grid-template-columns: 1fr;
+  padding: 20px 24px 32px;
+}
+
+.ap-user-actions-cell {
+  vertical-align: middle;
+}
+
+.ap-user-actions {
+  display: flex;
+  flex-direction: column;
+  align-items: stretch;
+  gap: 8px;
+  min-width: 148px;
+}
+
+@media (min-width: 640px) {
+  .ap-user-actions {
+    flex-direction: row;
+    flex-wrap: wrap;
+    align-items: center;
+  }
+}
+
+.ap-assignments-section {
+  margin-top: 8px;
+  padding-top: 8px;
+  border-top: 1px solid var(--cp-border);
+}
+
+.ap-class-pick-label {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  margin-top: 12px;
+  max-width: min(520px, 100%);
+}
+
+.ap-class-pick-caption {
+  font-size: 13px;
+  font-weight: 700;
+  color: var(--cp-green-dark);
+}
+
+.ap-class-pick-select {
+  width: 100%;
+}
+
+.ap-assignments-table-wrap {
+  margin-top: 16px;
+}
+
+.ap-assignments-table .ap-assign-lesson {
+  font-weight: 700;
+}
+
+.ap-assignments-table .ap-assign-task {
+  font-weight: 500;
+}
+
+.ap-assign-ids {
+  margin-top: 4px;
+  font-size: 11px;
+  color: #757575;
+  font-variant-numeric: tabular-nums;
+}
+
+.ap-assign-nums {
+  white-space: nowrap;
+  font-variant-numeric: tabular-nums;
+}
+
+.ap-assign-date {
+  font-size: 12px;
+  white-space: nowrap;
+}
+
+.ap-assign-actions {
+  width: 1%;
+  vertical-align: middle;
+}
+
+.ap-assign-delete {
+  padding: 6px 12px;
+  font-size: 12px;
+  font-weight: 700;
+  border: 1px solid rgba(211, 47, 47, 0.45);
+  background: #fff;
+  color: #c62828;
+  border-radius: 8px;
+  cursor: pointer;
+}
+
+.ap-assign-delete:hover:not(:disabled) {
+  background: rgba(211, 47, 47, 0.08);
+}
+
+.ap-assign-delete:disabled {
+  opacity: 0.55;
+  cursor: not-allowed;
+}
