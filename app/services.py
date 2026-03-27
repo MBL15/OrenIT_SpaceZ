@@ -6,6 +6,7 @@ import re
 from datetime import datetime, timezone
 from typing import Any
 
+from sqlalchemy import func
 from sqlalchemy.orm import Session
 
 from app.models import (
@@ -125,16 +126,18 @@ def level_from_total_xp(xp: int) -> int:
 
 
 def grant_lesson_completion_xp_if_eligible(
-    db: Session, user_id: int, lesson_id: int, xp_amount: int
+    db: Session,
+    user_id: int,
+    lesson_id: int,
+    xp_amount: int,
+    *,
+    max_wrong: int = 2,
 ) -> int:
     """Если теория и практика пройдены и бонус ещё не выдан — начисляет XP и помечает урок."""
     lp = db.get(LessonProgress, (user_id, lesson_id))
-    if (
-        not lp
-        or not lp.theory_done
-        or not lp.practice_done
-        or lp.lesson_xp_claimed
-    ):
+    if not lp or not lp.theory_done or lp.lesson_xp_claimed:
+        return 0
+    if not recompute_lesson_practice_done(db, user_id, lesson_id, max_wrong=max_wrong):
         return 0
     lp.lesson_xp_claimed = True
     lp.updated_at = _now_iso()
@@ -146,6 +149,8 @@ def add_score(db: Session, user_id: int, points: int) -> None:
     stat = db.get(UserStat, user_id)
     wid = iso_week_id()
     if not stat:
+        if points <= 0:
+            return
         stat = UserStat(
             user_id=user_id,
             score_total=points,
@@ -158,12 +163,31 @@ def add_score(db: Session, user_id: int, points: int) -> None:
     if stat.week_id != wid:
         stat.score_week = 0
         stat.week_id = wid
-    stat.score_total += points
-    stat.score_week += points
+    stat.score_total = max(0, stat.score_total + points)
+    stat.score_week = max(0, stat.score_week + points)
     stat.updated_at = _now_iso()
 
 
-def recompute_lesson_practice_done(db: Session, user_id: int, lesson_id: int) -> bool:
+def wrong_attempts_for_lesson(db: Session, user_id: int, lesson_id: int) -> int:
+    n = (
+        db.query(func.count(TaskAttempt.id))
+        .join(TaskInstance, TaskAttempt.task_instance_id == TaskInstance.id)
+        .join(TaskTemplate, TaskInstance.task_template_id == TaskTemplate.id)
+        .filter(
+            TaskAttempt.user_id == user_id,
+            TaskTemplate.lesson_id == lesson_id,
+            TaskAttempt.is_correct.is_(False),
+        )
+        .scalar()
+    )
+    return int(n or 0)
+
+
+def recompute_lesson_practice_done(
+    db: Session, user_id: int, lesson_id: int, *, max_wrong: int = 2
+) -> bool:
+    if wrong_attempts_for_lesson(db, user_id, lesson_id) > max_wrong:
+        return False
     templates = db.query(TaskTemplate).filter(TaskTemplate.lesson_id == lesson_id).all()
     if not templates:
         return False

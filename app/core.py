@@ -25,6 +25,10 @@ class Settings:
         self.daily_first_correct_coins = int(os.getenv("DAILY_FIRST_CORRECT_COINS", "50"))
         self.daily_each_next_extra_coins = int(os.getenv("DAILY_EACH_NEXT_EXTRA_COINS", "10"))
         self.lesson_completion_xp = int(os.getenv("LESSON_COMPLETION_XP", "100"))
+        # Макс. неверных попыток по уроку (практика): дальше ответ не принимается; зачёт урока только при ≤ этого числа ошибок.
+        self.practice_max_wrong_per_lesson = int(os.getenv("PRACTICE_MAX_WRONG_PER_LESSON", "2"))
+        self.practice_wrong_coin_penalty = int(os.getenv("PRACTICE_WRONG_COIN_PENALTY", "5"))
+        self.practice_wrong_xp_penalty = int(os.getenv("PRACTICE_WRONG_XP_PENALTY", "10"))
         self.speed_bonus_ms = int(os.getenv("SPEED_BONUS_MS", "30000"))
         self.speed_bonus_amount = int(os.getenv("SPEED_BONUS_AMOUNT", "5"))
 

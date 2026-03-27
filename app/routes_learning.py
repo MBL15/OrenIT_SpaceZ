@@ -25,6 +25,7 @@ from app.models import (
     TaskInstance,
     TaskTemplate,
     User,
+    UserStat,
     Wallet,
 )
 from app.invites import find_class_invite
@@ -40,6 +41,7 @@ from app.services import (
     recompute_lesson_practice_done,
     render_prompt,
     sample_params,
+    wrong_attempts_for_lesson,
 )
 
 settings = get_settings()
@@ -150,6 +152,7 @@ class ProgressRow(BaseModel):
     practice_done: bool
     correct_attempts: int
     total_attempts: int
+    wrong_attempts: int = Field(description="Неверные попытки по практике урока")
 
 
 def _counts_for_lesson(db: Session, user_id: int, lesson_id: int) -> tuple[int, int]:
@@ -185,14 +188,19 @@ def _progress_for_user(db: Session, user: User) -> list[ProgressRow]:
             continue
         lp = db.get(LessonProgress, (user.id, lid))
         c, t = _counts_for_lesson(db, user.id, lid)
+        wrong = max(0, t - c)
+        practice_ok = recompute_lesson_practice_done(
+            db, user.id, lid, max_wrong=settings.practice_max_wrong_per_lesson
+        )
         out.append(
             ProgressRow(
                 lesson_id=lid,
                 lesson_title=lesson.title,
                 theory_done=bool(lp.theory_done) if lp else False,
-                practice_done=bool(lp.practice_done) if lp else False,
+                practice_done=practice_ok,
                 correct_attempts=c,
                 total_attempts=t,
+                wrong_attempts=wrong,
             )
         )
     return out
@@ -410,7 +418,13 @@ def mark_theory_complete(
         lp.theory_done = True
         lp.updated_at = ts
     db.flush()
-    grant_lesson_completion_xp_if_eligible(db, user.id, lesson_id, settings.lesson_completion_xp)
+    grant_lesson_completion_xp_if_eligible(
+        db,
+        user.id,
+        lesson_id,
+        settings.lesson_completion_xp,
+        max_wrong=settings.practice_max_wrong_per_lesson,
+    )
     db.commit()
     return None
 
@@ -427,9 +441,11 @@ class StartPracticeResponse(BaseModel):
 class SubmitPracticeResponse(BaseModel):
     correct: bool
     expected_answer: str | None = None
-    coins_awarded: int = Field(description="Начислено коинов за верный ответ")
+    coins_awarded: int = Field(
+        description="Изменение коинов: начисление за верный ответ или списание за ошибку (отрицательное)",
+    )
     xp_awarded: int = Field(
-        description="Очки опыта с этой отправки (задача ± бонус урока, если урок только прошли)",
+        description="Изменение XP: награда за задачу, штраф за ошибку (отрицательное) или бонус за урок",
     )
 
 
@@ -513,6 +529,15 @@ def submit_practice(
     tolerance = float(cfg.get("tolerance", 0))
     correct = answers_match(inst.expected_answer, body.answer, tolerance)
 
+    if not correct and wrong_attempts_for_lesson(db, user.id, tmpl.lesson_id) >= settings.practice_max_wrong_per_lesson:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail=(
+                "Превышен лимит ошибок по этому уроку. "
+                f"Разрешено не более {settings.practice_max_wrong_per_lesson} неверных ответов по практике."
+            ),
+        )
+
     start = datetime.fromisoformat(inst.created_at)
     end = datetime.now(timezone.utc).replace(microsecond=0)
     if start.tzinfo is None:
@@ -521,6 +546,7 @@ def submit_practice(
 
     coins_awarded = 0
     xp_from_task = 0
+    currency_on_attempt = 0
     if correct:
         prior_today = _count_correct_attempts_today_utc(db, user.id)
         coins_awarded = (
@@ -530,6 +556,7 @@ def submit_practice(
         if duration_ms <= settings.speed_bonus_ms:
             coins_awarded += settings.speed_bonus_amount
             xp_from_task += 5
+        currency_on_attempt = coins_awarded
 
     attempt = TaskAttempt(
         task_instance_id=inst.id,
@@ -539,7 +566,7 @@ def submit_practice(
         started_at=body.started_at,
         submitted_at=_now_iso(),
         duration_ms=duration_ms,
-        currency_awarded=coins_awarded,
+        currency_awarded=currency_on_attempt,
     )
     db.add(attempt)
     db.flush()
@@ -560,26 +587,75 @@ def submit_practice(
             )
         add_score(db, user.id, xp_from_task)
 
-        lp = db.get(LessonProgress, (user.id, tmpl.lesson_id))
-        if not lp:
-            lp = LessonProgress(
+        lp_gain = db.get(LessonProgress, (user.id, tmpl.lesson_id))
+        if not lp_gain:
+            lp_gain = LessonProgress(
                 user_id=user.id,
                 lesson_id=tmpl.lesson_id,
                 theory_done=False,
                 practice_done=False,
                 updated_at=_now_iso(),
             )
-            db.add(lp)
+            db.add(lp_gain)
             db.flush()
-        if recompute_lesson_practice_done(db, user.id, tmpl.lesson_id):
-            lp2 = db.get(LessonProgress, (user.id, tmpl.lesson_id))
-            if lp2:
-                lp2.practice_done = True
-                lp2.updated_at = _now_iso()
+        lp_gain.practice_pool_coins += coins_awarded
+        lp_gain.practice_pool_xp += xp_from_task
+        lp_gain.updated_at = _now_iso()
+
+    elif not correct and (settings.practice_wrong_coin_penalty > 0 or settings.practice_wrong_xp_penalty > 0):
+        lp_pen = db.get(LessonProgress, (user.id, tmpl.lesson_id))
+        if lp_pen:
+            coins_taken = 0
+            if settings.practice_wrong_coin_penalty > 0 and lp_pen.practice_pool_coins > 0:
+                intended = min(settings.practice_wrong_coin_penalty, lp_pen.practice_pool_coins)
+                wallet = db.get(Wallet, user.id)
+                if wallet:
+                    coins_taken = min(intended, wallet.balance)
+                    if coins_taken:
+                        wallet.balance -= coins_taken
+                        lp_pen.practice_pool_coins -= coins_taken
+                        db.add(
+                            CurrencyTransaction(
+                                user_id=user.id,
+                                delta=-coins_taken,
+                                reason="task_wrong",
+                                ref_type="task_attempt",
+                                ref_id=attempt.id,
+                                created_at=_now_iso(),
+                            )
+                        )
+            coins_awarded = -coins_taken
+            currency_on_attempt = -coins_taken
+            attempt.currency_awarded = currency_on_attempt
+
+            if settings.practice_wrong_xp_penalty > 0 and lp_pen.practice_pool_xp > 0:
+                take_xp = min(settings.practice_wrong_xp_penalty, lp_pen.practice_pool_xp)
+                st0 = db.get(UserStat, user.id)
+                tot0 = st0.score_total if st0 else 0
+                add_score(db, user.id, -take_xp)
+                st1 = db.get(UserStat, user.id)
+                tot1 = st1.score_total if st1 else 0
+                actual_xp = tot0 - tot1
+                lp_pen.practice_pool_xp -= actual_xp
+                xp_from_task = -actual_xp
+
+            lp_pen.updated_at = _now_iso()
+
+    lp = db.get(LessonProgress, (user.id, tmpl.lesson_id))
+    if lp:
+        done = recompute_lesson_practice_done(
+            db, user.id, tmpl.lesson_id, max_wrong=settings.practice_max_wrong_per_lesson
+        )
+        lp.practice_done = done
+        lp.updated_at = _now_iso()
 
     db.flush()
     xp_from_lesson = grant_lesson_completion_xp_if_eligible(
-        db, user.id, tmpl.lesson_id, settings.lesson_completion_xp
+        db,
+        user.id,
+        tmpl.lesson_id,
+        settings.lesson_completion_xp,
+        max_wrong=settings.practice_max_wrong_per_lesson,
     )
     xp_awarded = xp_from_task + xp_from_lesson
 
