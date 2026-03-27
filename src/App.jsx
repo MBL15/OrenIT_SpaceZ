@@ -5,9 +5,11 @@ import LoginPage from './pages/LoginPage.jsx'
 import RegisterPage from './pages/RegisterPage.jsx'
 import DashboardPage from './pages/DashboardPage.jsx'
 import ClassPage from './pages/ClassPage.jsx'
+import TeacherCabinetPage from './pages/TeacherCabinetPage.jsx'
 import ProfilePage from './pages/ProfilePage.jsx'
 import LessonAsgardPage from './pages/LessonAsgardPage.jsx'
 import ParentsPage from './pages/ParentsPage.jsx'
+import AssignmentsPage from './pages/AssignmentsPage.jsx'
 import './App.css'
 
 function ProtectedRoute({ children }) {
@@ -63,10 +65,26 @@ function App() {
           }
         />
         <Route
+          path="/app/teacher"
+          element={
+            <ProtectedRoute>
+              <TeacherCabinetPage />
+            </ProtectedRoute>
+          }
+        />
+        <Route
           path="/app/profile"
           element={
             <ProtectedRoute>
               <ProfilePage />
+            </ProtectedRoute>
+          }
+        />
+        <Route
+          path="/app/assignments"
+          element={
+            <ProtectedRoute>
+              <AssignmentsPage />
             </ProtectedRoute>
           }
         />

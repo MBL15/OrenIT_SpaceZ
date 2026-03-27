@@ -258,3 +258,248 @@
   color: var(--cp-green-dark);
   font-variant-numeric: tabular-nums;
 }
+
+/* Вступление по коду: превью и шаги */
+.cp-join-body {
+  padding: 16px 18px 18px;
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+}
+
+.cp-join-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+  align-items: flex-start;
+}
+
+.cp-join-input {
+  flex: 1 1 220px;
+  max-width: 320px;
+  font-size: 18px;
+  font-weight: 700;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  font-family: var(--mono, ui-monospace, monospace);
+}
+
+.cp-join-preview {
+  margin: 0;
+  padding: 14px 16px;
+  border-radius: 12px;
+  background: rgba(76, 175, 80, 0.1);
+  border: 1px solid rgba(76, 175, 80, 0.35);
+  color: var(--cp-green-dark);
+  font-size: 14px;
+  line-height: 1.45;
+}
+
+.cp-join-preview strong {
+  display: block;
+  font-size: 1.05rem;
+  margin-bottom: 4px;
+}
+
+.cp-my-classes {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin: 0 0 4px;
+  padding: 0;
+  list-style: none;
+}
+
+.cp-my-classes li {
+  margin: 0;
+}
+
+.cp-my-class-pill {
+  display: inline-block;
+  padding: 6px 12px;
+  border-radius: 999px;
+  font-size: 12px;
+  font-weight: 700;
+  background: rgba(76, 175, 80, 0.18);
+  color: var(--cp-green-dark);
+  border: 1px solid var(--cp-border);
+}
+
+/* Кабинет учителя — сетка на том же фоне, что кабинет ученика */
+.cp-teacher-head {
+  padding: 16px 24px;
+  border-bottom: 1px solid var(--cp-border);
+}
+
+.cp-teacher-grid {
+  display: grid;
+  grid-template-columns: minmax(220px, 280px) 1fr;
+  gap: 28px;
+  padding: 24px;
+  align-items: start;
+}
+
+@media (max-width: 768px) {
+  .cp-teacher-grid {
+    grid-template-columns: 1fr;
+  }
+}
+
+.cp-teacher-side .cp-teacher-form {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  margin-bottom: 18px;
+}
+
+.cp-teacher-class-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.cp-teacher-class-btn {
+  width: 100%;
+  text-align: left;
+  padding: 12px 14px;
+  border-radius: 12px;
+  border: 1px solid var(--cp-border);
+  background: #fafdfb;
+  color: var(--cp-green-dark);
+  font: inherit;
+  font-weight: 600;
+  cursor: pointer;
+  transition:
+    border-color 0.15s,
+    background 0.15s;
+}
+
+.cp-teacher-class-btn:hover {
+  border-color: var(--cp-green);
+  background: rgba(76, 175, 80, 0.08);
+}
+
+.cp-teacher-class-btn--on {
+  border-color: var(--cp-green);
+  background: rgba(76, 175, 80, 0.14);
+  box-shadow: 0 0 0 1px rgba(76, 175, 80, 0.2);
+}
+
+.cp-teacher-h2 {
+  margin: 0 0 12px;
+  font-size: 1.05rem;
+  font-weight: 800;
+  color: var(--cp-green-dark);
+}
+
+.cp-teacher-h3 {
+  margin: 0 0 8px;
+  font-size: 0.95rem;
+  font-weight: 800;
+  color: var(--cp-green-dark);
+}
+
+.cp-teacher-block {
+  margin-bottom: 26px;
+}
+
+.cp-teacher-muted {
+  margin: 0 0 10px;
+  font-size: 13px;
+  color: #558b2f;
+  line-height: 1.45;
+}
+
+.cp-teacher-code-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+  align-items: center;
+}
+
+.cp-teacher-code {
+  flex: 1 1 200px;
+  padding: 14px 18px;
+  border-radius: 12px;
+  background: linear-gradient(180deg, #f1f8e9 0%, #e8f5e9 100%);
+  border: 2px dashed rgba(76, 175, 80, 0.45);
+  font: 700 1.35rem/1.2 ui-monospace, Consolas, monospace;
+  letter-spacing: 0.18em;
+  color: var(--cp-green-dark);
+  text-align: center;
+}
+
+.cp-teacher-token-details {
+  margin-top: 12px;
+  font-size: 12px;
+  color: #757575;
+}
+
+.cp-teacher-token-details summary {
+  cursor: pointer;
+  color: var(--cp-green-dark);
+  font-weight: 600;
+}
+
+.cp-teacher-token-long {
+  display: block;
+  margin-top: 8px;
+  padding: 10px;
+  word-break: break-all;
+  font: 12px/1.4 ui-monospace, monospace;
+  background: #f5f5f5;
+  border-radius: 8px;
+  color: #424242;
+}
+
+.cp-teacher-students,
+.cp-teacher-assignments {
+  margin: 8px 0 0;
+  padding-left: 1.2rem;
+  color: var(--cp-green-dark);
+  font-size: 14px;
+}
+
+.cp-teacher-assign {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  max-width: 440px;
+  margin-top: 10px;
+}
+
+.cp-teacher-label {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--cp-green-dark);
+}
+
+.cp-teacher-alerts {
+  padding: 0 24px 16px;
+}
+
+.cp-teacher-banner {
+  margin: 0 0 8px;
+  padding: 10px 14px;
+  border-radius: 10px;
+  background: rgba(76, 175, 80, 0.12);
+  border: 1px solid rgba(76, 175, 80, 0.35);
+  color: var(--cp-green-dark);
+  font-size: 14px;
+}
+
+.cp-teacher-err {
+  margin: 0;
+  padding: 10px 14px;
+  border-radius: 10px;
+  background: rgba(211, 47, 47, 0.08);
+  border: 1px solid rgba(211, 47, 47, 0.35);
+  color: #c62828;
+  font-size: 14px;
+}

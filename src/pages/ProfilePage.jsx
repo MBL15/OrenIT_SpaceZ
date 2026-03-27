@@ -1,26 +1,36 @@
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
 import { Link } from 'react-router-dom'
+import { apiFetch } from '../api.js'
 import { useAuth } from '../AuthContext.jsx'
 import mascotUrl from '../assets/mascot.png'
 import './ProfilePage.css'
 
-const POINTS_KEY = 'spaceedu-points'
-
-function readCoins() {
-  try {
-    const raw = Number(localStorage.getItem(POINTS_KEY) || '0')
-    return Number.isFinite(raw) && raw > 0 ? Math.floor(raw) : 0
-  } catch {
-    return 0
-  }
-}
-
 export default function ProfilePage() {
   const { user } = useAuth()
   const [hint, setHint] = useState('')
-  const [coins] = useState(readCoins)
+  const [balance, setBalance] = useState(null)
 
-  const displayName = user?.name?.trim() || user?.email || 'Ученик'
+  const displayName =
+    user?.display_name?.trim() || user?.name?.trim() || user?.login || 'Профиль'
+
+  useEffect(() => {
+    if (!user || user.role !== 'child') {
+      setBalance(null)
+      return
+    }
+    let cancelled = false
+    ;(async () => {
+      const res = await apiFetch('/me/wallet')
+      if (cancelled || !res.ok) return
+      const data = await res.json().catch(() => null)
+      if (!cancelled && data && typeof data.balance === 'number') {
+        setBalance(data.balance)
+      }
+    })()
+    return () => {
+      cancelled = true
+    }
+  }, [user])
 
   return (
     <div className="pf-wrap">
@@ -33,10 +43,17 @@ export default function ProfilePage() {
 
         <main className="pf-main">
           <h1 className="pf-username">{displayName}</h1>
-          <div className="pf-coins" aria-label="Баланс коинов">
-            <span className="pf-coins-label">Баланс коинов</span>
-            <strong className="pf-coins-value">{coins}</strong>
-          </div>
+          {user?.role === 'child' && balance !== null && (
+            <div className="pf-coins" aria-label="Баланс коинов">
+              <span className="pf-coins-label">Монеты</span>
+              <strong className="pf-coins-value">{balance}</strong>
+            </div>
+          )}
+          {user?.role === 'teacher' && (
+            <p className="pf-email" style={{ marginBottom: 12 }}>
+              Роль: учитель — классы и задания в разделе «Мои классы».
+            </p>
+          )}
 
           <div className="pf-mascot-wrap">
             <img
@@ -59,7 +76,7 @@ export default function ProfilePage() {
               Кастомизация
             </button>
             {hint ? <p className="pf-hint">{hint}</p> : null}
-            {user?.email ? <p className="pf-email">{user.email}</p> : null}
+            {user?.login ? <p className="pf-email">Логин: {user.login}</p> : null}
           </div>
         </main>
       </div>

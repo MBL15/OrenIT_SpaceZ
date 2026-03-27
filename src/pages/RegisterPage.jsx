@@ -11,22 +11,29 @@ export default function RegisterPage() {
   const [password, setPassword] = useState('')
   const [password2, setPassword2] = useState('')
   const [error, setError] = useState('')
+  const [pending, setPending] = useState(false)
   const [role, setRole] = useState('')
 
-  const handleSubmit = (e) => {
+  const handleSubmit = async (e) => {
     e.preventDefault()
     setError('')
     if (password !== password2) {
       setError('Пароли не совпадают')
       return
     }
-    if (password.length < 6) {
-      setError('Пароль не короче 6 символов')
+    if (password.length < 4) {
+      setError('Пароль не короче 4 символов (как на сервере)')
       return
     }
-    const r = register(email, password, name)
-    if (r.ok) navigate('/app', { replace: true })
-    else setError(r.error)
+    const accountType = role === 'teacher' ? 'teacher' : 'child'
+    setPending(true)
+    try {
+      const r = await register(email, password, name, accountType)
+      if (r.ok) navigate('/app', { replace: true })
+      else setError(r.error || 'Ошибка регистрации')
+    } finally {
+      setPending(false)
+    }
   }
 
   return (
@@ -41,7 +48,7 @@ export default function RegisterPage() {
         </div>
         <h1 className="space-auth-title">Регистрация</h1>
         <p className="space-auth-sub">
-          {role ? 'Создайте аккаунт, чтобы войти в кабинет' : 'Сначала выберите формат аккаунта'}
+          {role ? 'Создайте аккаунт — данные уйдут на сервер OrenIT' : 'Сначала выберите формат аккаунта'}
         </p>
         {!role ? (
           <div className="space-role-select" role="group" aria-label="Тип аккаунта">
@@ -64,7 +71,7 @@ export default function RegisterPage() {
           <form className="space-form" onSubmit={handleSubmit}>
             {error && <p className="space-form-error">{error}</p>}
             <p className="space-role-note">
-              Выбран тип: {role === 'teacher' ? 'Учитель' : 'Ученик/родитель'}
+              Выбран тип: {role === 'teacher' ? 'Учитель' : 'Ученик'}
             </p>
             <button
               type="button"
@@ -77,7 +84,7 @@ export default function RegisterPage() {
               Изменить тип аккаунта
             </button>
             <label className="space-label">
-              Имя
+              Имя (отображаемое)
               <input
                 className="space-input"
                 type="text"
@@ -89,12 +96,12 @@ export default function RegisterPage() {
               />
             </label>
             <label className="space-label">
-              Email
+              Логин
               <input
                 className="space-input"
-                type="email"
-                name="email"
-                autoComplete="email"
+                type="text"
+                name="login"
+                autoComplete="username"
                 value={email}
                 onChange={(e) => setEmail(e.target.value)}
                 required
@@ -110,7 +117,7 @@ export default function RegisterPage() {
                 value={password}
                 onChange={(e) => setPassword(e.target.value)}
                 required
-                minLength={6}
+                minLength={4}
               />
             </label>
             <label className="space-label">
@@ -125,8 +132,12 @@ export default function RegisterPage() {
                 required
               />
             </label>
-            <button type="submit" className="space-btn space-btn--primary space-btn--block">
-              Создать аккаунт
+            <button
+              type="submit"
+              className="space-btn space-btn--primary space-btn--block"
+              disabled={pending}
+            >
+              {pending ? 'Создание…' : 'Создать аккаунт'}
             </button>
           </form>
         )}

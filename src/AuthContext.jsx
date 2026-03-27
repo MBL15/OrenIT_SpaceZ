@@ -1,11 +1,5 @@
 import { createContext, useContext, useEffect, useState } from 'react'
-import {
-  clearSession,
-  getSession,
-  loginUser,
-  registerUser,
-  setSession,
-} from './auth'
+import { apiLogin, apiRegister, clearToken, fetchMe } from './auth'
 
 const AuthContext = createContext(null)
 
@@ -14,37 +8,58 @@ export function AuthProvider({ children }) {
   const [ready, setReady] = useState(false)
 
   useEffect(() => {
-    setUser(getSession())
-    setReady(true)
+    try {
+      localStorage.removeItem('spaceedu-users')
+      localStorage.removeItem('spaceedu-session')
+    } catch {
+      /* ignore */
+    }
+    let cancelled = false
+    ;(async () => {
+      try {
+        const me = await fetchMe()
+        if (!cancelled) setUser(me)
+      } finally {
+        if (!cancelled) setReady(true)
+      }
+    })()
+    return () => {
+      cancelled = true
+    }
   }, [])
 
-  const login = (email, password) => {
-    const r = loginUser(email, password)
-    if (r.ok) {
-      setUser(r.user)
-      return { ok: true }
-    }
-    return r
-  }
-
-  const register = (email, password, name) => {
-    const r = registerUser({ email, password, name })
+  const login = async (loginStr, password) => {
+    const r = await apiLogin(loginStr, password)
     if (!r.ok) return r
-    const session = {
-      email: email.trim().toLowerCase(),
-      name: name.trim(),
-    }
-    setSession(session)
-    setUser(session)
+    const me = await fetchMe()
+    setUser(me)
+    if (!me) return { ok: false, error: 'Не удалось загрузить профиль' }
     return { ok: true }
   }
 
+  const register = async (loginStr, password, displayName, accountType) => {
+    const r = await apiRegister({
+      login: loginStr,
+      password,
+      display_name: displayName,
+      account_type: accountType,
+    })
+    if (!r.ok) return r
+    return login(loginStr, password)
+  }
+
   const logout = () => {
-    clearSession()
+    clearToken()
     setUser(null)
   }
 
-  if (!ready) return null
+  if (!ready) {
+    return (
+      <div className="orenit-boot" role="status">
+        Загрузка…
+      </div>
+    )
+  }
 
   return (
     <AuthContext.Provider value={{ user, login, register, logout }}>

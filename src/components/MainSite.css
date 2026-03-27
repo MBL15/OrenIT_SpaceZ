@@ -961,3 +961,120 @@
   justify-content: center;
   border: 2px solid var(--ms-card);
 }
+
+button.ms-pill {
+  cursor: pointer;
+  font: inherit;
+  font-family: var(--ms-font);
+}
+
+/* Оверлей «Родителям» поверх кабинета */
+.ms-parents-overlay {
+  --ms-green: #4caf50;
+  --ms-green-hover: #43a047;
+  --ms-green-dark: #1b5e20;
+  --ms-green-soft: #e8f5e9;
+  --ms-card: #ffffff;
+  --ms-border: #e3e6e8;
+  --ms-font: system-ui, -apple-system, 'Segoe UI', Roboto, 'Helvetica Neue', Arial,
+    sans-serif;
+  position: fixed;
+  inset: 0;
+  z-index: 200;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: max(12px, env(safe-area-inset-top)) 16px 16px;
+  box-sizing: border-box;
+  font-family: var(--ms-font);
+}
+
+.ms-parents-backdrop {
+  position: absolute;
+  inset: 0;
+  margin: 0;
+  padding: 0;
+  border: none;
+  background: rgba(15, 18, 22, 0.55);
+  cursor: pointer;
+}
+
+.ms-parents-modal {
+  position: relative;
+  z-index: 1;
+  width: 100%;
+  max-width: 720px;
+  max-height: min(88vh, 860px);
+  display: flex;
+  flex-direction: column;
+  background: var(--ms-card);
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  border-radius: 20px;
+  box-shadow:
+    0 1px 2px rgba(0, 0, 0, 0.06),
+    0 24px 56px rgba(0, 0, 0, 0.45);
+  overflow: hidden;
+  color: var(--ms-green-dark);
+}
+
+.ms-parents-modal-scroll {
+  overflow-y: auto;
+  flex: 1;
+  min-height: 0;
+  -webkit-overflow-scrolling: touch;
+}
+
+.ms-parents-close {
+  position: absolute;
+  top: 10px;
+  right: 10px;
+  z-index: 3;
+  width: 40px;
+  height: 40px;
+  margin: 0;
+  padding: 0;
+  border: none;
+  border-radius: 12px;
+  background: rgba(255, 255, 255, 0.92);
+  color: var(--ms-green-dark);
+  font-size: 26px;
+  line-height: 1;
+  cursor: pointer;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.08);
+  transition: background 0.15s ease, color 0.15s ease;
+}
+
+.ms-parents-close:hover {
+  background: var(--ms-green-soft);
+  color: var(--ms-green-dark);
+}
+
+.ms-parents-close:focus-visible {
+  outline: 2px solid var(--ms-green);
+  outline-offset: 2px;
+}
+
+/* Компактная модалка только с проверкой возраста */
+.ms-parents-modal--gate {
+  max-width: 440px;
+  max-height: none;
+}
+
+.ms-parents-modal-scroll--gate {
+  padding: 20px 44px 24px 20px;
+  overflow: visible;
+}
+
+.ms-parents-gate-heading {
+  margin: 0 0 8px;
+  font-size: 1.25rem;
+  font-weight: 700;
+  color: var(--ms-green-dark);
+}
+
+.ms-parents-gate-hint {
+  margin: 0 0 16px;
+  font-size: 0.9rem;
+  line-height: 1.45;
+  color: rgba(27, 94, 32, 0.85);
+}

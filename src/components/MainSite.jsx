@@ -103,31 +103,28 @@ function toResponsivePercent(basePercent, adjustPx = 0) {
   return basePercent + (adjustPx / MAP_REFERENCE_SIZE_PX) * 100
 }
 
-const SECTIONS = [
-  { id: 'latest', title: 'Последнее', btn: 'ПЕРЕЙТИ', glyph: '≡' },
+const SECTION_TAIL = [
   { id: 'cs', title: 'Основы информатики', btn: 'ПЕРЕЙТИ', glyph: '</>' },
   { id: 'product', title: 'Продуктовая разработка', btn: 'ПЕРЕЙТИ', glyph: '◎' },
   { id: 'olympiad', title: 'Олимпиады', btn: 'ПЕРЕЙТИ', glyph: '★' },
 ]
 
-const LAST_TAB_KEY = 'spaceedu-last-tab'
-
-function readLastTab() {
-  try {
-    const v = localStorage.getItem(LAST_TAB_KEY)
-    if (v === 'cs' || v === 'product' || v === 'olympiad') return v
-  } catch {
-    /* ignore */
-  }
-  return null
-}
-
-function writeLastTab(id) {
-  try {
-    localStorage.setItem(LAST_TAB_KEY, id)
-  } catch {
-    /* ignore */
-  }
+function sectionsForUser(user) {
+  const isChild = user?.role === 'child'
+  const roleFirst = isChild
+    ? {
+        id: 'assignments',
+        title: 'Задания от учителя',
+        btn: 'ПЕРЕЙТИ',
+        glyph: '✎',
+      }
+    : {
+        id: 'teacher_hub',
+        title: 'Кабинет учителя',
+        btn: 'ПЕРЕЙТИ',
+        glyph: '▣',
+      }
+  return [roleFirst, ...SECTION_TAIL]
 }
 
 function IconChart() {
@@ -156,32 +153,22 @@ function IconChevron() {
   )
 }
 
-function SectionGrid({ onOpen, canOpenLatest }) {
+function SectionGrid({ sections, onOpen }) {
   return (
     <div className="ms-grid">
-      {SECTIONS.map((s) => {
-        const isLatest = s.id === 'latest'
-        const disabled = isLatest && !canOpenLatest
-        return (
-          <article key={s.id} className="ms-card">
-            <div className="ms-card-glyph">{s.glyph}</div>
-            <h3>{s.title}</h3>
-            <button
-              type="button"
-              className="ms-card-btn"
-              disabled={disabled}
-              title={
-                disabled
-                  ? 'Сначала откройте любой раздел — «Последнее» откроет его'
-                  : undefined
-              }
-              onClick={() => onOpen(s.id)}
-            >
-              {s.btn}
-            </button>
-          </article>
-        )
-      })}
+      {sections.map((s) => (
+        <article key={s.id} className="ms-card">
+          <div className="ms-card-glyph">{s.glyph}</div>
+          <h3>{s.title}</h3>
+          <button
+            type="button"
+            className="ms-card-btn"
+            onClick={() => onOpen(s.id)}
+          >
+            {s.btn}
+          </button>
+        </article>
+      ))}
     </div>
   )
 }
@@ -308,19 +295,17 @@ function Placeholder({ title, text }) {
   )
 }
 
-export default function MainSite({ user, onLogout }) {
+export default function MainSite({ user, onLogout, onOpenParents }) {
   const location = useLocation()
   const navigate = useNavigate()
   const [tab, setTab] = useState('latest')
   const [displayTab, setDisplayTab] = useState('latest')
   const [isClosingTab, setIsClosingTab] = useState(false)
-  const [lastVisitedId, setLastVisitedId] = useState(readLastTab)
-
   useEffect(() => {
     if (location.state?.openTab === 'cs') {
       setTab('cs')
-      setLastVisitedId('cs')
-      writeLastTab('cs')
+      setDisplayTab('cs')
+      setIsClosingTab(false)
       navigate(location.pathname, { replace: true, state: {} })
     }
   }, [location.state, location.pathname, navigate])
@@ -335,16 +320,14 @@ export default function MainSite({ user, onLogout }) {
   }, [isClosingTab, tab])
 
   const openSection = (id) => {
-    if (id === 'latest') {
-      if (lastVisitedId) {
-        setTab(lastVisitedId)
-        setDisplayTab(lastVisitedId)
-        setIsClosingTab(false)
-      }
+    if (id === 'assignments') {
+      navigate('/app/assignments')
       return
     }
-    setLastVisitedId(id)
-    writeLastTab(id)
+    if (id === 'teacher_hub') {
+      navigate('/app/teacher')
+      return
+    }
     setTab(id)
     setDisplayTab(id)
     setIsClosingTab(false)
@@ -355,6 +338,12 @@ export default function MainSite({ user, onLogout }) {
     setIsClosingTab(true)
     setTab('latest')
   }
+
+  const displayName =
+    user?.display_name?.trim() || user?.name?.trim() || user?.login || ''
+  const hideParentsLink =
+    user?.role === 'teacher' || user?.role === 'admin'
+  const sections = sectionsForUser(user)
 
   return (
     <div className="ms-wrap">
@@ -367,19 +356,23 @@ export default function MainSite({ user, onLogout }) {
                   ◆
                 </span>
                 SpacEdu
-                {user?.name ? (
-                  <span className="ms-brand-user">{user.name}</span>
+                {displayName ? (
+                  <span className="ms-brand-user">{displayName}</span>
                 ) : null}
               </span>
-              <Link className="ms-pill" to="/app/parents">
-                <IconChart />
-                Родителям
-              </Link>
+              {!hideParentsLink && onOpenParents ? (
+                <button type="button" className="ms-pill" onClick={onOpenParents}>
+                  <IconChart />
+                  Родителям
+                </button>
+              ) : null}
             </div>
             <div className="ms-topbar-right">
-              <Link className="ms-link" to="/app/class">
-                Мой класс
-              </Link>
+              {user?.role === 'child' ? (
+                <Link className="ms-link" to="/app/class">
+                  Мой класс
+                </Link>
+              ) : null}
               <Link className="ms-profile" to="/app/profile">
                 <span className="ms-avatar" aria-hidden />
                 <span>Мой профиль</span>
@@ -410,15 +403,16 @@ export default function MainSite({ user, onLogout }) {
               <div className="ms-intro">
                 <h2 className="ms-intro-title">Добро пожаловать</h2>
                 <p className="ms-intro-text">
-                  Выберите раздел ниже — материалы откроются здесь же. Пункт
-                  «Последнее» вернёт к последнему открытому разделу.
+                  Выберите раздел ниже — материалы откроются здесь же.
+                  {user?.role === 'child'
+                    ? ' Задания от учителя — отдельная страница (первая карточка).'
+                    : user?.role === 'teacher' || user?.role === 'admin'
+                      ? ' Кабинет классов — первая карточка.'
+                      : null}
                 </p>
               </div>
               <div className="ms-latest-body">
-                <SectionGrid
-                  onOpen={openSection}
-                  canOpenLatest={Boolean(lastVisitedId)}
-                />
+                <SectionGrid sections={sections} onOpen={openSection} />
               </div>
               <aside className="ms-shelf" aria-label="Подсказки по кабинету">
                 <div className="ms-shelf-item">
@@ -431,7 +425,9 @@ export default function MainSite({ user, onLogout }) {
                 <div className="ms-shelf-item">
                   <span className="ms-shelf-kicker">Мой класс</span>
                   <p className="ms-shelf-text">
-                    Журнал, задания и одноклассники — через ссылку в шапке.
+                    {user?.role === 'child'
+                      ? 'Класс и рейтинг — по ссылке в шапке; задания от учителя — первой карточкой.'
+                      : 'Классы и ученики — по первой карточке на этой странице.'}
                   </p>
                 </div>
                 <div className="ms-shelf-item">

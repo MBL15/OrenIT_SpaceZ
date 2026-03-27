@@ -75,22 +75,6 @@
   overflow: visible;
 }
 
-.asg-cutscene-stage--bg-only .asg-bubble {
-  top: 14px;
-  max-width: min(80%, 360px);
-  width: fit-content;
-}
-
-.asg-cutscene-stage--bg-only .asg-bubble--left {
-  left: 16px;
-}
-
-.asg-cutscene-stage--bg-only .asg-bubble--right {
-  right: 350px;
-  top: 98px;
-  min-width: 0;
-}
-
 .asg-actor {
   position: relative;
   min-height: 460px;
@@ -123,7 +107,7 @@
 
 .asg-bubble {
   position: absolute;
-  top: 24px;
+  top: 52px;
   max-width: min(88%, 280px);
   background: #fff;
   border: 2px solid #2e7d32;
@@ -147,7 +131,7 @@
 }
 
 .asg-bubble--left {
-  left: 78px;
+  left: 210px;
 }
 
 .asg-bubble--left::after {
@@ -156,7 +140,7 @@
 }
 
 .asg-bubble--right {
-  right: 78px;
+  right: 376px;
 }
 
 .asg-bubble--right::after {

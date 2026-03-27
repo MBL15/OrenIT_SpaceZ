@@ -1,59 +1,68 @@
-const USERS_KEY = 'spaceedu-users'
-const SESSION_KEY = 'spaceedu-session'
+import {
+  apiFetch,
+  clearToken,
+  getToken,
+  parseErrorDetail,
+  setToken,
+} from './api'
 
-function getUsers() {
-  try {
-    const raw = localStorage.getItem(USERS_KEY)
-    return raw ? JSON.parse(raw) : []
-  } catch {
-    return []
+export function normalizeUser(u) {
+  if (!u) return null
+  return {
+    id: u.id,
+    login: u.login,
+    display_name: u.display_name,
+    role: u.role,
+    avatar_id: u.avatar_id,
+    name: u.display_name,
+    email: u.login,
   }
 }
 
-function saveUsers(users) {
-  localStorage.setItem(USERS_KEY, JSON.stringify(users))
-}
-
-/** Демо: пароли в localStorage только для прототипа, не для продакшена */
-export function registerUser({ email, password, name }) {
-  const users = getUsers()
-  if (users.some((u) => u.email.toLowerCase() === email.toLowerCase())) {
-    return { ok: false, error: 'Пользователь с таким email уже зарегистрирован' }
-  }
-  users.push({
-    email: email.trim().toLowerCase(),
-    password,
-    name: name.trim(),
+export async function apiLogin(login, password) {
+  const res = await apiFetch('/auth/login', {
+    method: 'POST',
+    skipAuth: true,
+    body: JSON.stringify({ login: login.trim(), password }),
   })
-  saveUsers(users)
+  const data = await res.json().catch(() => ({}))
+  if (!res.ok) {
+    return { ok: false, error: parseErrorDetail(data) }
+  }
+  if (!data.access_token) {
+    return { ok: false, error: 'Нет токена в ответе сервера' }
+  }
+  setToken(data.access_token)
   return { ok: true }
 }
 
-export function loginUser(email, password) {
-  const users = getUsers()
-  const u = users.find(
-    (x) =>
-      x.email === email.trim().toLowerCase() && x.password === password,
-  )
-  if (!u) return { ok: false, error: 'Неверный email или пароль' }
-  const session = { email: u.email, name: u.name }
-  localStorage.setItem(SESSION_KEY, JSON.stringify(session))
-  return { ok: true, user: session }
+export async function apiRegister({ login, password, display_name, account_type }) {
+  const res = await apiFetch('/auth/register', {
+    method: 'POST',
+    skipAuth: true,
+    body: JSON.stringify({
+      login: login.trim(),
+      password,
+      display_name: display_name.trim(),
+      account_type: account_type === 'teacher' ? 'teacher' : 'child',
+    }),
+  })
+  const data = await res.json().catch(() => ({}))
+  if (!res.ok) {
+    return { ok: false, error: parseErrorDetail(data) }
+  }
+  return { ok: true }
 }
 
-export function getSession() {
-  try {
-    const raw = localStorage.getItem(SESSION_KEY)
-    return raw ? JSON.parse(raw) : null
-  } catch {
+export async function fetchMe() {
+  if (!getToken()) return null
+  const res = await apiFetch('/auth/me')
+  if (!res.ok) {
+    clearToken()
     return null
   }
+  const u = await res.json().catch(() => null)
+  return normalizeUser(u)
 }
 
-export function setSession(user) {
-  localStorage.setItem(SESSION_KEY, JSON.stringify(user))
-}
-
-export function clearSession() {
-  localStorage.removeItem(SESSION_KEY)
-}
+export { clearToken, getToken }

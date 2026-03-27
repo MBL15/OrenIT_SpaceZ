@@ -1,6 +1,8 @@
 import { useMemo, useState } from 'react'
 import { Link } from 'react-router-dom'
 import { useAuth } from '../AuthContext.jsx'
+import ParentAgeCheckForm from '../components/ParentAgeCheckForm.jsx'
+import { clearParentUnlock, isParentUnlocked } from '../lib/parentUnlock.js'
 import './ParentsPage.css'
 
 /** Демо-данные; заменить ответом API */
@@ -159,6 +161,7 @@ function TasksBarChart({ periodKey }) {
 
 export default function ParentsPage() {
   const { user } = useAuth()
+  const [unlocked, setUnlocked] = useState(() => isParentUnlocked())
   const [period, setPeriod] = useState(/** @type {'week' | 'month' | 'semester'} */ ('month'))
 
   const avgAll = useMemo(() => overallAvg(SUBJECT_PERFORMANCE), [])
@@ -170,6 +173,47 @@ export default function ParentsPage() {
   const studentLine = user?.name
     ? `Учащийся: ${user.name}`
     : 'Данные по текущему аккаунту'
+
+  const requestVerificationAgain = () => {
+    clearParentUnlock()
+    setUnlocked(false)
+  }
+
+  if (!unlocked) {
+    return (
+      <div className="pp-wrap">
+        <div className="pp-panel">
+          <header className="pp-top">
+            <Link className="pp-back" to="/app">
+              ← К разделам
+            </Link>
+            <h1 className="pp-title">Родителям</h1>
+            <p className="pp-sub">
+              Короткая проверка: ответьте на пример без калькулятора, чтобы
+              открыть статистику.
+            </p>
+          </header>
+          <div className="pp-main">
+            <div className="pp-gate-head">
+              <span className="pp-gate-badge">Шаг 1 из 1</span>
+              <h2 className="pp-gate-page-title">Короткая проверка</h2>
+              <p className="pp-gate-lead">
+                Это нужно, чтобы ребёнок не видел оценки без взрослого рядом.
+              </p>
+            </div>
+            <div className="pp-gate">
+              <ParentAgeCheckForm
+                onSuccess={() => setUnlocked(true)}
+                submitLabel="Подтвердить и открыть раздел"
+                secondaryLabel="Другое задание"
+                cardClassName="pp-gate-card"
+              />
+            </div>
+          </div>
+        </div>
+      </div>
+    )
+  }
 
   return (
     <div className="pp-wrap">
@@ -183,6 +227,20 @@ export default function ParentsPage() {
         </header>
 
         <div className="pp-main">
+          <div className="pp-unlock-bar" role="status">
+            <span>
+              Раздел открыт после проверки. Доступ около 28 минут — затем снова
+              понадобится пример.
+            </span>
+            <button
+              type="button"
+              className="pp-lock-again"
+              onClick={requestVerificationAgain}
+            >
+              Запросить проверку снова
+            </button>
+          </div>
+
           <p className="pp-note" role="status">
             Показаны демонстрационные данные. После подключения к журналу здесь
             появятся реальные оценки и статистика заданий.
@@ -195,8 +253,7 @@ export default function ParentsPage() {
               </h2>
               <p className="pp-section-hint">
                 Средний балл по разделам (пятибальная шкала) · среднее по всем
-                разделам:{' '}
-                <strong>{avgAll}</strong>
+                разделам: <strong>{avgAll}</strong>
               </p>
             </div>
             <div className="pp-section-body">

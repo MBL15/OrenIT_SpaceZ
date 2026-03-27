@@ -11,13 +11,19 @@ export default function LoginPage() {
   const [email, setEmail] = useState('')
   const [password, setPassword] = useState('')
   const [error, setError] = useState('')
+  const [pending, setPending] = useState(false)
 
-  const handleSubmit = (e) => {
+  const handleSubmit = async (e) => {
     e.preventDefault()
     setError('')
-    const r = login(email, password)
-    if (r.ok) navigate(from, { replace: true })
-    else setError(r.error)
+    setPending(true)
+    try {
+      const r = await login(email, password)
+      if (r.ok) navigate(from, { replace: true })
+      else setError(r.error || 'Ошибка входа')
+    } finally {
+      setPending(false)
+    }
   }
 
   return (
@@ -31,17 +37,17 @@ export default function LoginPage() {
           <span className="space-brand-word">SpacEdu</span>
         </div>
         <h1 className="space-auth-title">Вход</h1>
-        <p className="space-auth-sub">Введите email и пароль</p>
+        <p className="space-auth-sub">Логин и пароль (как при регистрации на сервере)</p>
 
         <form className="space-form" onSubmit={handleSubmit}>
           {error && <p className="space-form-error">{error}</p>}
           <label className="space-label">
-            Email
+            Логин
             <input
               className="space-input"
-              type="email"
-              name="email"
-              autoComplete="email"
+              type="text"
+              name="login"
+              autoComplete="username"
               value={email}
               onChange={(e) => setEmail(e.target.value)}
               required
@@ -59,8 +65,12 @@ export default function LoginPage() {
               required
             />
           </label>
-          <button type="submit" className="space-btn space-btn--primary space-btn--block">
-            Войти
+          <button
+            type="submit"
+            className="space-btn space-btn--primary space-btn--block"
+            disabled={pending}
+          >
+            {pending ? 'Вход…' : 'Войти'}
           </button>
         </form>
 
