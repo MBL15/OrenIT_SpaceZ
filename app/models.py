@@ -55,6 +55,35 @@ class ClassMember(Base):
     joined_at: Mapped[str] = mapped_column(String(32), nullable=False)
 
 
+class ClassInvite(Base):
+    """Одна активная ссылка-приглашение на класс (токен для вступления учеников)."""
+
+    __tablename__ = "class_invites"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    class_id: Mapped[int] = mapped_column(
+        ForeignKey("classes.id", ondelete="CASCADE"), unique=True, nullable=False
+    )
+    token: Mapped[str] = mapped_column(String(128), unique=True, nullable=False)
+    invite_code: Mapped[str | None] = mapped_column(String(16), unique=True, nullable=True)
+    created_at: Mapped[str] = mapped_column(String(32), nullable=False)
+
+
+class ClassTaskAssignment(Base):
+    """Задание от учителя для всего класса (шаблон из урока)."""
+
+    __tablename__ = "class_task_assignments"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    class_id: Mapped[int] = mapped_column(ForeignKey("classes.id", ondelete="CASCADE"), nullable=False)
+    task_template_id: Mapped[int] = mapped_column(
+        ForeignKey("task_templates.id", ondelete="CASCADE"), nullable=False
+    )
+    teacher_id: Mapped[int] = mapped_column(ForeignKey("users.id", ondelete="CASCADE"), nullable=False)
+    note: Mapped[str | None] = mapped_column(Text, nullable=True)
+    created_at: Mapped[str] = mapped_column(String(32), nullable=False)
+
+
 class Lesson(Base):
     __tablename__ = "lessons"
 

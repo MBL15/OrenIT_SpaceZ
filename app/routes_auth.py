@@ -31,10 +31,11 @@ def register(body: RegisterBody, db: Annotated[Session, Depends(get_db)]) -> Use
     if db.query(User).filter(User.login == body.login).first():
         raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail="Login taken")
     ts = datetime.now(timezone.utc).replace(microsecond=0).isoformat()
+    role = "teacher" if body.account_type == "teacher" else "child"
     user = User(
         login=body.login,
         password_hash=hash_password(body.password),
-        role="child",
+        role=role,
         display_name=body.display_name,
         avatar_id=None,
         created_at=ts,
@@ -42,8 +43,9 @@ def register(body: RegisterBody, db: Annotated[Session, Depends(get_db)]) -> Use
     db.add(user)
     db.commit()
     db.refresh(user)
-    ensure_user_economy_rows(db, user.id)
-    db.commit()
+    if role == "child":
+        ensure_user_economy_rows(db, user.id)
+        db.commit()
     return user
 
 

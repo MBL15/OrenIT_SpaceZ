@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+from typing import Literal
+
 from pydantic import BaseModel, ConfigDict, Field
 
 
@@ -12,6 +14,10 @@ class RegisterBody(BaseModel):
     login: str = Field(min_length=2, max_length=128)
     password: str = Field(min_length=4, max_length=128)
     display_name: str = Field(min_length=1, max_length=128)
+    account_type: Literal["child", "teacher"] = Field(
+        default="child",
+        description="child — ученик, teacher — учитель (свой класс, приглашения, задания)",
+    )
 
 
 class LoginBody(BaseModel):
@@ -55,6 +61,17 @@ class CreateClassBody(BaseModel):
 
 class AddMemberBody(BaseModel):
     user_id: int
+
+
+class JoinClassBody(BaseModel):
+    """Короткий invite_code (8 символов) или полный секретный токен."""
+
+    invite_token: str = Field(min_length=6, max_length=128)
+
+
+class TeacherAssignTaskBody(BaseModel):
+    task_template_id: int
+    note: str | None = Field(default=None, max_length=2000)
 
 
 class AdminUserBody(BaseModel):

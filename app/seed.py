@@ -4,9 +4,11 @@ from datetime import datetime, timezone
 
 from sqlalchemy.orm import Session
 
+from app.invites import new_invite_code, new_invite_token
 from app.models import (
-    CourseClass,
+    ClassInvite,
     ClassMember,
+    CourseClass,
     Lesson,
     LessonTheoryBlock,
     MascotItem,
@@ -116,5 +118,13 @@ def seed_if_empty(db: Session) -> None:
     db.add(klass)
     db.flush()
     db.add(ClassMember(class_id=klass.id, user_id=child.id, joined_at=_now_iso()))
+    db.add(
+        ClassInvite(
+            class_id=klass.id,
+            token=new_invite_token(),
+            invite_code=new_invite_code(),
+            created_at=_now_iso(),
+        )
+    )
 
     db.commit()

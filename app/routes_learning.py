@@ -12,6 +12,10 @@ from sqlalchemy.orm import Session
 from app.access import get_current_user, get_parent_token_user
 from app.core import get_db, get_settings
 from app.models import (
+    ClassInvite,
+    ClassMember,
+    ClassTaskAssignment,
+    CourseClass,
     CurrencyTransaction,
     Lesson,
     LessonProgress,
@@ -23,7 +27,8 @@ from app.models import (
     User,
     Wallet,
 )
-from app.schemas import PracticeSubmitBody
+from app.invites import find_class_invite
+from app.schemas import JoinClassBody, PracticeSubmitBody
 from app.services import (
     add_score,
     answers_match,
@@ -82,11 +87,10 @@ def list_lessons(
     db: Annotated[Session, Depends(get_db)],
     user: Annotated[User, Depends(get_current_user)],
 ) -> list[Lesson]:
+    # Учитель назначает только то, что видно на платформе (опубликованные уроки).
     q = db.query(Lesson).filter(Lesson.is_published.is_(True)).order_by(Lesson.sort_order)
-    if user.role == "child":
+    if user.role in ("child", "teacher", "admin"):
         return q.all()
-    if user.role in ("teacher", "admin"):
-        return db.query(Lesson).order_by(Lesson.sort_order).all()
     return []
 
 
@@ -99,8 +103,11 @@ def get_lesson(
     lesson = db.get(Lesson, lesson_id)
     if not lesson:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Not found")
-    if not lesson.is_published and user.role == "child":
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Not found")
+    if not lesson.is_published:
+        if user.role == "child":
+            raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Not found")
+        if user.role == "teacher":
+            raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Not found")
 
     theory = (
         db.query(LessonTheoryBlock)
@@ -215,6 +222,164 @@ def parent_progress(
     )
     db.commit()
     return _progress_for_user(db, user)
+
+
+# --- класс учителя: вступление по приглашению, задания ---
+
+
+class JoinClassResponse(BaseModel):
+    class_id: int
+    class_name: str
+    already_member: bool = False
+
+
+class InvitePreviewOut(BaseModel):
+    class_name: str
+    teacher_name: str | None = None
+    already_member: bool
+
+
+class MyClassRow(BaseModel):
+    class_id: int
+    class_name: str
+
+
+class MyAssignmentRow(BaseModel):
+    assignment_id: int
+    class_id: int
+    class_name: str
+    task_template_id: int
+    lesson_id: int
+    lesson_title: str
+    task_title: str | None
+    note: str | None
+    assigned_at: str
+
+
+@learning_router.get("/classes/invite-preview", response_model=InvitePreviewOut)
+def preview_class_invite(
+    code: str,
+    db: Annotated[Session, Depends(get_db)],
+    user: Annotated[User, Depends(get_current_user)],
+) -> InvitePreviewOut:
+    if user.role != "child":
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Проверка кода доступна только ученикам",
+        )
+    raw = code.strip()
+    if len(raw) < 6:
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+            detail="Введите код полностью (не короче 6 символов)",
+        )
+    inv = find_class_invite(db, raw)
+    if not inv:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Класс не найден. Проверьте код или попросите учителя обновить приглашение.",
+        )
+    c = db.get(CourseClass, inv.class_id)
+    if not c:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Класс больше не существует",
+        )
+    teacher = db.get(User, c.teacher_id)
+    teacher_name = teacher.display_name if teacher else None
+    already = db.get(ClassMember, (c.id, user.id)) is not None
+    return InvitePreviewOut(
+        class_name=c.name,
+        teacher_name=teacher_name,
+        already_member=already,
+    )
+
+
+@learning_router.get("/classes/me", response_model=list[MyClassRow])
+def list_my_classes(
+    db: Annotated[Session, Depends(get_db)],
+    user: Annotated[User, Depends(get_current_user)],
+) -> list[MyClassRow]:
+    if user.role != "child":
+        return []
+    members = db.query(ClassMember).filter(ClassMember.user_id == user.id).all()
+    out: list[MyClassRow] = []
+    for m in members:
+        c = db.get(CourseClass, m.class_id)
+        if c:
+            out.append(MyClassRow(class_id=c.id, class_name=c.name))
+    return out
+
+
+@learning_router.post("/classes/join", response_model=JoinClassResponse)
+def join_class_by_invite(
+    body: JoinClassBody,
+    db: Annotated[Session, Depends(get_db)],
+    user: Annotated[User, Depends(get_current_user)],
+) -> JoinClassResponse:
+    if user.role != "child":
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="В класс могут вступать только ученики",
+        )
+    inv = find_class_invite(db, body.invite_token)
+    if not inv:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Код не найден. Проверьте написание или попросите новый код у учителя.",
+        )
+    c = db.get(CourseClass, inv.class_id)
+    if not c:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Класс больше не существует",
+        )
+    if db.get(ClassMember, (c.id, user.id)):
+        return JoinClassResponse(class_id=c.id, class_name=c.name, already_member=True)
+    ts = datetime.now(timezone.utc).replace(microsecond=0).isoformat()
+    db.add(ClassMember(class_id=c.id, user_id=user.id, joined_at=ts))
+    db.commit()
+    return JoinClassResponse(class_id=c.id, class_name=c.name, already_member=False)
+
+
+@learning_router.get("/me/assignments", response_model=list[MyAssignmentRow])
+def my_teacher_assignments(
+    db: Annotated[Session, Depends(get_db)],
+    user: Annotated[User, Depends(get_current_user)],
+) -> list[MyAssignmentRow]:
+    if user.role != "child":
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Only students")
+    member_rows = db.query(ClassMember).filter(ClassMember.user_id == user.id).all()
+    if not member_rows:
+        return []
+    class_ids = [m.class_id for m in member_rows]
+    assigns = (
+        db.query(ClassTaskAssignment)
+        .filter(ClassTaskAssignment.class_id.in_(class_ids))
+        .order_by(ClassTaskAssignment.id.desc())
+        .all()
+    )
+    out: list[MyAssignmentRow] = []
+    for a in assigns:
+        c = db.get(CourseClass, a.class_id)
+        tmpl = db.get(TaskTemplate, a.task_template_id)
+        lesson = db.get(Lesson, tmpl.lesson_id) if tmpl else None
+        if not c or not tmpl or not lesson:
+            continue
+        out.append(
+            MyAssignmentRow(
+                assignment_id=a.id,
+                class_id=c.id,
+                class_name=c.name,
+                task_template_id=tmpl.id,
+                lesson_id=lesson.id,
+                lesson_title=lesson.title,
+                task_title=tmpl.title,
+                note=a.note,
+                assigned_at=a.created_at,
+            )
+        )
+    return out
 
 
 @learning_router.post("/lessons/{lesson_id}/theory-complete", status_code=204)

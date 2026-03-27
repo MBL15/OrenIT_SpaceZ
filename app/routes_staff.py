@@ -4,13 +4,23 @@ from datetime import datetime, timezone
 from typing import Annotated
 
 from fastapi import APIRouter, Depends, HTTPException, status
-from pydantic import BaseModel, ConfigDict
+from pydantic import BaseModel, ConfigDict, Field
 from sqlalchemy import func
 from sqlalchemy.orm import Session
 
-from app.access import get_current_user, hash_password, require_roles
+from app.access import hash_password, require_roles
 from app.core import get_db
-from app.models import ClassMember, CourseClass, Lesson, LessonTheoryBlock, TaskAttempt, TaskTemplate, User
+from app.models import (
+    ClassInvite,
+    ClassMember,
+    ClassTaskAssignment,
+    CourseClass,
+    Lesson,
+    LessonTheoryBlock,
+    TaskAttempt,
+    TaskTemplate,
+    User,
+)
 from app.schemas import (
     AddMemberBody,
     AdminLessonBody,
@@ -18,13 +28,56 @@ from app.schemas import (
     AdminTheoryBody,
     AdminUserBody,
     CreateClassBody,
+    TeacherAssignTaskBody,
     UserPublic,
 )
+from app.invites import new_invite_code, new_invite_token
 from app.services import ensure_user_economy_rows
 
 
 def _now_iso() -> str:
     return datetime.now(timezone.utc).replace(microsecond=0).isoformat()
+
+
+def _ensure_class_invite(db: Session, class_id: int) -> ClassInvite:
+    row = db.query(ClassInvite).filter(ClassInvite.class_id == class_id).first()
+    if row:
+        if not row.invite_code:
+            used = {
+                c
+                for (c,) in db.query(ClassInvite.invite_code)
+                .filter(ClassInvite.invite_code.isnot(None))
+                .all()
+                if c
+            }
+            code = new_invite_code()
+            while code in used:
+                code = new_invite_code()
+            row.invite_code = code
+            db.commit()
+            db.refresh(row)
+        return row
+    ts = _now_iso()
+    used = {
+        c
+        for (c,) in db.query(ClassInvite.invite_code)
+        .filter(ClassInvite.invite_code.isnot(None))
+        .all()
+        if c
+    }
+    code = new_invite_code()
+    while code in used:
+        code = new_invite_code()
+    row = ClassInvite(
+        class_id=class_id,
+        token=new_invite_token(),
+        invite_code=code,
+        created_at=ts,
+    )
+    db.add(row)
+    db.commit()
+    db.refresh(row)
+    return row
 
 
 teacher_router = APIRouter(prefix="/teacher", tags=["teacher"])
@@ -58,6 +111,7 @@ def create_class(
     db.add(c)
     db.commit()
     db.refresh(c)
+    _ensure_class_invite(db, c.id)
     return c
 
 
@@ -118,6 +172,163 @@ def class_students(
                 user=UserPublic.model_validate(u),
                 total_attempts=int(total),
                 correct_attempts=int(corr),
+            )
+        )
+    return out
+
+
+class InviteLinkOut(BaseModel):
+    invite_code: str
+    invite_token: str
+    join_hint: str = Field(
+        description="Ученик вводит invite_code в кабинете или передаёт invite_token в POST /classes/join",
+    )
+
+
+@teacher_router.get("/classes/{class_id}/invite", response_model=InviteLinkOut)
+def get_class_invite(
+    class_id: int,
+    db: Annotated[Session, Depends(get_db)],
+    user: Annotated[User, Depends(require_roles("teacher", "admin"))],
+) -> InviteLinkOut:
+    c = db.get(CourseClass, class_id)
+    if not c or c.teacher_id != user.id:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Class not found")
+    inv = _ensure_class_invite(db, class_id)
+    return InviteLinkOut(
+        invite_code=inv.invite_code or "",
+        invite_token=inv.token,
+        join_hint="Короткий код для ученика — invite_code; полный токен тоже подходит для POST /classes/join",
+    )
+
+
+@teacher_router.post("/classes/{class_id}/invite/refresh", response_model=InviteLinkOut)
+def refresh_class_invite(
+    class_id: int,
+    db: Annotated[Session, Depends(get_db)],
+    user: Annotated[User, Depends(require_roles("teacher", "admin"))],
+) -> InviteLinkOut:
+    c = db.get(CourseClass, class_id)
+    if not c or c.teacher_id != user.id:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Class not found")
+    inv = db.query(ClassInvite).filter(ClassInvite.class_id == class_id).first()
+    ts = _now_iso()
+    used = {
+        c
+        for (c,) in db.query(ClassInvite.invite_code).filter(ClassInvite.invite_code.isnot(None)).all()
+        if c
+    }
+    new_code = new_invite_code()
+    while new_code in used:
+        new_code = new_invite_code()
+    if inv:
+        inv.token = new_invite_token()
+        inv.invite_code = new_code
+        inv.created_at = ts
+    else:
+        inv = ClassInvite(
+            class_id=class_id,
+            token=new_invite_token(),
+            invite_code=new_code,
+            created_at=ts,
+        )
+        db.add(inv)
+    db.commit()
+    db.refresh(inv)
+    return InviteLinkOut(
+        invite_code=inv.invite_code or "",
+        invite_token=inv.token,
+        join_hint="Короткий код для ученика — invite_code; полный токен тоже подходит для POST /classes/join",
+    )
+
+
+class AssignmentOut(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
+    id: int
+    class_id: int
+    task_template_id: int
+    lesson_id: int
+    lesson_title: str
+    task_title: str | None
+    note: str | None
+    created_at: str
+
+
+@teacher_router.post("/classes/{class_id}/assignments", response_model=AssignmentOut)
+def assign_task_to_class(
+    class_id: int,
+    body: TeacherAssignTaskBody,
+    db: Annotated[Session, Depends(get_db)],
+    user: Annotated[User, Depends(require_roles("teacher", "admin"))],
+) -> AssignmentOut:
+    c = db.get(CourseClass, class_id)
+    if not c or c.teacher_id != user.id:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Class not found")
+    tmpl = db.get(TaskTemplate, body.task_template_id)
+    if not tmpl:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Task template not found")
+    lesson = db.get(Lesson, tmpl.lesson_id)
+    if not lesson:
+        raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail="Broken lesson")
+    if not lesson.is_published:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Назначать можно только задания из опубликованных уроков платформы",
+        )
+    row = ClassTaskAssignment(
+        class_id=class_id,
+        task_template_id=tmpl.id,
+        teacher_id=user.id,
+        note=body.note,
+        created_at=_now_iso(),
+    )
+    db.add(row)
+    db.commit()
+    db.refresh(row)
+    return AssignmentOut(
+        id=row.id,
+        class_id=row.class_id,
+        task_template_id=row.task_template_id,
+        lesson_id=lesson.id,
+        lesson_title=lesson.title,
+        task_title=tmpl.title,
+        note=row.note,
+        created_at=row.created_at,
+    )
+
+
+@teacher_router.get("/classes/{class_id}/assignments", response_model=list[AssignmentOut])
+def list_class_assignments(
+    class_id: int,
+    db: Annotated[Session, Depends(get_db)],
+    user: Annotated[User, Depends(require_roles("teacher", "admin"))],
+) -> list[AssignmentOut]:
+    c = db.get(CourseClass, class_id)
+    if not c or c.teacher_id != user.id:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Class not found")
+    rows = (
+        db.query(ClassTaskAssignment)
+        .filter(ClassTaskAssignment.class_id == class_id)
+        .order_by(ClassTaskAssignment.id.desc())
+        .all()
+    )
+    out: list[AssignmentOut] = []
+    for row in rows:
+        tmpl = db.get(TaskTemplate, row.task_template_id)
+        lesson = db.get(Lesson, tmpl.lesson_id) if tmpl else None
+        if not tmpl or not lesson:
+            continue
+        out.append(
+            AssignmentOut(
+                id=row.id,
+                class_id=row.class_id,
+                task_template_id=row.task_template_id,
+                lesson_id=lesson.id,
+                lesson_title=lesson.title,
+                task_title=tmpl.title,
+                note=row.note,
+                created_at=row.created_at,
             )
         )
     return out
