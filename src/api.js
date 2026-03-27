@@ -2,6 +2,12 @@
  * В dev пустой base + относительные пути → Vite proxy на FastAPI (порт 8000).
  * В проде: VITE_API_BASE=https://api.example.com
  */
+import {
+  DEV_MOCK_TOKEN,
+  devMockApiFetch,
+  isDevMockAdminEnabled,
+} from './devAuthMock.js'
+
 const BASE = (import.meta.env.VITE_API_BASE ?? '').replace(/\/$/, '')
 
 const TOKEN_KEY = 'orenit_access_token'
@@ -46,6 +52,13 @@ export async function apiFetch(path, options = {}) {
     headers.set('Content-Type', 'application/json')
   }
   const token = getToken()
+  if (
+    isDevMockAdminEnabled() &&
+    token === DEV_MOCK_TOKEN &&
+    !skipAuth
+  ) {
+    return devMockApiFetch(path, init)
+  }
   if (token && !skipAuth) {
     headers.set('Authorization', `Bearer ${token}`)
   }

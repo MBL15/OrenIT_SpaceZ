@@ -274,6 +274,17 @@
   opacity: 0.9;
 }
 
+.space-auth-sub--mock {
+  margin-top: -12px;
+  margin-bottom: 18px;
+  padding: 10px 12px;
+  background: rgba(76, 175, 80, 0.12);
+  border-radius: 10px;
+  border: 1px solid rgba(76, 175, 80, 0.35);
+  font-size: 13px;
+  line-height: 1.45;
+}
+
 .space-role-select {
   display: grid;
   grid-template-columns: 1fr;

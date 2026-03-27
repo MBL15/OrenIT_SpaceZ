@@ -33,12 +33,12 @@ export default function TeacherCabinetPage() {
   }, [])
 
   useEffect(() => {
-    if (user?.role !== 'teacher' && user?.role !== 'admin') return
+    if (user?.role !== 'teacher') return
     loadClasses()
   }, [user, loadClasses])
 
   useEffect(() => {
-    if (user?.role !== 'teacher' && user?.role !== 'admin') return
+    if (user?.role !== 'teacher') return
     ;(async () => {
       const res = await apiFetch('/lessons')
       if (!res.ok) return
@@ -102,7 +102,10 @@ export default function TeacherCabinetPage() {
     }
   }, [pickLessonId])
 
-  if (user?.role !== 'teacher' && user?.role !== 'admin') {
+  if (user?.role === 'admin') {
+    return <Navigate to="/app/admin" replace />
+  }
+  if (user?.role !== 'teacher') {
     return <Navigate to="/app/class" replace />
   }
 

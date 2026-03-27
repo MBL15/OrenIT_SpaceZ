@@ -3,6 +3,15 @@ import { useNavigate } from 'react-router-dom'
 import artemiyUrl from '../assets/artemiy.png'
 import odinUrl from '../assets/odin.png'
 import asgardCutsceneBgUrl from '../assets/asgard-cutscene-bg.png'
+import AsgardQuizEditorModal, {
+  AsgardAdminPencilButton,
+} from '../components/AsgardQuizEditorModal.jsx'
+import { isAdminUser } from '../auth.js'
+import { useAuth } from '../AuthContext.jsx'
+import {
+  loadAsgardQuizSpec,
+  specToQuizSteps,
+} from '../lib/asgardQuizSpec.js'
 import { shuffleAllQuizSteps } from '../lib/shuffleQuizOptions.js'
 import './LessonAsgardPage.css'
 
@@ -48,32 +57,20 @@ function addPoints(amount) {
   }
 }
 
-/** Варианты без префикса «А)» — порядок на экране задаётся shuffleAllQuizSteps при каждой попытке */
-const ASGARD_QUIZ_STEPS = {
-  1: [
-    { choiceId: 'asg1-true', text: 'Истина (1)', correct: true },
-    { choiceId: 'asg1-false', text: 'Ложь (0)', correct: false },
-    {
-      choiceId: 'asg1-order',
-      text: 'Зависит от порядка вычислений',
-      correct: false,
-    },
-  ],
-  2: [
-    { choiceId: 'asg2-equiv', text: 'X ∧ ¬Y', correct: true },
-    { choiceId: 'asg2-wrong1', text: '¬X ∨ ¬Y', correct: false },
-    { choiceId: 'asg2-wrong2', text: 'X ∨ ¬Y', correct: false },
-  ],
-  3: [
-    { choiceId: 'asg3-anna', text: 'Анна', correct: false },
-    { choiceId: 'asg3-boris', text: 'Борис', correct: false },
-    { choiceId: 'asg3-victor', text: 'Виктор', correct: true },
-    { choiceId: 'asg3-galina', text: 'Галина', correct: false },
-  ],
-}
-
 export default function LessonAsgardPage() {
   const navigate = useNavigate()
+  const { user } = useAuth()
+  const isAdmin = isAdminUser(user)
+
+  const [quizSpec, setQuizSpec] = useState(() => loadAsgardQuizSpec())
+  const [quizEditorOpen, setQuizEditorOpen] = useState(false)
+  const [quizEditorKey, setQuizEditorKey] = useState(0)
+
+  const openQuizEditor = () => {
+    setQuizEditorKey((k) => k + 1)
+    setQuizEditorOpen(true)
+  }
+
   const [completedView, setCompletedView] = useState(readComplete)
   const [questionStep, setQuestionStep] = useState(1)
   const [answers, setAnswers] = useState({})
@@ -83,8 +80,10 @@ export default function LessonAsgardPage() {
   const [cutsceneIndex, setCutsceneIndex] = useState(0)
   const [showCorrectModal, setShowCorrectModal] = useState(false)
   const [lastAwardedPoints, setLastAwardedPoints] = useState(null)
-  /** Перестановка вариантов на текущую попытку (новая при каждом входе в тест) */
   const [shuffledQuiz, setShuffledQuiz] = useState(null)
+
+  const totalQuestions = quizSpec.length
+  const isLastQuestion = totalQuestions > 0 && questionStep === totalQuestions
 
   useEffect(() => {
     if (!inCutscene || cutsceneIndex !== 0) return undefined
@@ -120,6 +119,26 @@ export default function LessonAsgardPage() {
     setAnswers((prev) => ({ ...prev, [step]: choiceId }))
     setCorrectAnswers((prev) => ({ ...prev, [step]: isCorrect }))
   }
+
+  const startTest = () => {
+    setShuffledQuiz(shuffleAllQuizSteps(specToQuizSteps(quizSpec)))
+    setQuestionStep(1)
+    setAnswers({})
+    setCorrectAnswers({})
+    setLessonStage('test')
+  }
+
+  const applyQuizSpecUpdate = (next) => {
+    setQuizSpec(next)
+    setLessonStage('theory')
+    setShuffledQuiz(null)
+    setQuestionStep(1)
+    setAnswers({})
+    setCorrectAnswers({})
+  }
+
+  const currentQuestion = quizSpec[questionStep - 1]
+  const currentShuffled = shuffledQuiz?.[questionStep]
 
   if (completedView) {
     return (
@@ -266,130 +285,70 @@ export default function LessonAsgardPage() {
                       <li>Условия в задаче можно объединять: И, ИЛИ, НЕ.</li>
                       <li>Пошаговая проверка условий ведет к правильному ответу.</li>
                     </ul>
-                    <button
-                      type="button"
-                      className="asg-btn-primary"
-                      onClick={() => {
-                        setShuffledQuiz(shuffleAllQuizSteps(ASGARD_QUIZ_STEPS))
-                        setQuestionStep(1)
-                        setLessonStage('test')
-                      }}
-                    >
-                      Перейти к тесту
-                    </button>
+                    <div className="asg-theory-actions">
+                      <button type="button" className="asg-btn-primary" onClick={startTest}>
+                        Перейти к тесту
+                      </button>
+                      {isAdmin ? (
+                        <AsgardAdminPencilButton onClick={openQuizEditor} />
+                      ) : null}
+                    </div>
                   </section>
                 ) : (
                   <section className="asg-block" aria-labelledby="asg-task-placeholder">
-                    <h2 id="asg-task-placeholder" className="asg-h2">
-                      Тест (вопрос {questionStep} из 3)
-                    </h2>
-                    {questionStep === 1 && shuffledQuiz?.[1] ? (
+                    <div className="asg-test-heading">
+                      <h2 id="asg-task-placeholder" className="asg-h2 asg-h2--test">
+                        Тест (вопрос {questionStep} из {totalQuestions || 1})
+                      </h2>
+                      {isAdmin ? (
+                        <AsgardAdminPencilButton onClick={openQuizEditor} />
+                      ) : null}
+                    </div>
+                    {currentQuestion && currentShuffled ? (
                       <>
-                        <p className="asg-p">
-                          Дано выражение <strong>¬A ∧ B ∨ C</strong>, где A=1, B=0, C=1.
-                          Каково значение выражения с приоритетом (¬, затем ∧, затем ∨)?
-                        </p>
-                        <div className="asg-quiz" role="group" aria-label="Варианты ответа вопроса 1">
-                          {shuffledQuiz[1].map((opt) => (
+                        <p className="asg-p">{currentQuestion.prompt}</p>
+                        <div
+                          className="asg-quiz"
+                          role="group"
+                          aria-label={`Варианты ответа вопроса ${questionStep}`}
+                        >
+                          {currentShuffled.map((opt) => (
                             <button
                               key={opt.choiceId}
                               type="button"
-                              className={`asg-option${answers[1] === opt.choiceId ? ' asg-option--picked' : ''}${answers[1] === opt.choiceId && !opt.correct ? ' asg-option--wrong' : ''}`}
+                              className={`asg-option${answers[questionStep] === opt.choiceId ? ' asg-option--picked' : ''}${answers[questionStep] === opt.choiceId && !opt.correct ? ' asg-option--wrong' : ''}`}
                               onClick={() =>
-                                handleQuestionAnswer(1, opt.choiceId, opt.correct)
+                                handleQuestionAnswer(questionStep, opt.choiceId, opt.correct)
                               }
                             >
                               {opt.displayText}
                             </button>
                           ))}
                         </div>
-                        {correctAnswers[1] ? (
+                        {correctAnswers[questionStep] ? (
                           <>
                             <p className="asg-p">Да, правильно!</p>
                             <button
                               type="button"
                               className="asg-btn-primary"
-                              onClick={() => setQuestionStep(2)}
-                            >
-                              Перейти к вопросу 2
-                            </button>
-                          </>
-                        ) : null}
-                      </>
-                    ) : null}
-
-                    {questionStep === 2 && shuffledQuiz?.[2] ? (
-                      <>
-                        <p className="asg-p">
-                          Известны законы де Моргана: ¬(A ∧ B) = ¬A ∨ ¬B и ¬(A ∨ B) = ¬A ∧ ¬B.
-                          Выберите выражение, которое логически эквивалентно выражению
-                          <strong> ¬(¬X ∨ Y)</strong>.
-                        </p>
-                        <div className="asg-quiz" role="group" aria-label="Варианты ответа вопроса 2">
-                          {shuffledQuiz[2].map((opt) => (
-                            <button
-                              key={opt.choiceId}
-                              type="button"
-                              className={`asg-option${answers[2] === opt.choiceId ? ' asg-option--picked' : ''}${answers[2] === opt.choiceId && !opt.correct ? ' asg-option--wrong' : ''}`}
                               onClick={() =>
-                                handleQuestionAnswer(2, opt.choiceId, opt.correct)
+                                isLastQuestion
+                                  ? handleCorrectAnswer()
+                                  : setQuestionStep((s) => s + 1)
                               }
                             >
-                              {opt.displayText}
-                            </button>
-                          ))}
-                        </div>
-                        {correctAnswers[2] ? (
-                          <>
-                            <p className="asg-p">Да, правильно!</p>
-                            <button
-                              type="button"
-                              className="asg-btn-primary"
-                              onClick={() => setQuestionStep(3)}
-                            >
-                              Перейти к вопросу 3
+                              {isLastQuestion
+                                ? 'Завершить блок вопросов'
+                                : `Перейти к вопросу ${questionStep + 1}`}
                             </button>
                           </>
                         ) : null}
                       </>
-                    ) : null}
-
-                    {questionStep === 3 && shuffledQuiz?.[3] ? (
-                      <>
-                        <p className="asg-p">
-                          В школе разбили окно. Анна сказала: «Это сделал Борис». Борис сказал:
-                          «Это сделала Галина». Виктор сказал: «Я этого не делал». Галина сказала:
-                          «Борис лжёт, когда говорит, что это сделала я». Известно, что правду
-                          сказал ровно один ученик. Кто разбил окно?
-                        </p>
-                        <div className="asg-quiz" role="group" aria-label="Варианты ответа вопроса 3">
-                          {shuffledQuiz[3].map((opt) => (
-                            <button
-                              key={opt.choiceId}
-                              type="button"
-                              className={`asg-option${answers[3] === opt.choiceId ? ' asg-option--picked' : ''}${answers[3] === opt.choiceId && !opt.correct ? ' asg-option--wrong' : ''}`}
-                              onClick={() =>
-                                handleQuestionAnswer(3, opt.choiceId, opt.correct)
-                              }
-                            >
-                              {opt.displayText}
-                            </button>
-                          ))}
-                        </div>
-                        {correctAnswers[3] ? (
-                          <>
-                            <p className="asg-p">Да, правильно!</p>
-                            <button
-                              type="button"
-                              className="asg-btn-primary"
-                              onClick={handleCorrectAnswer}
-                            >
-                              Завершить блок вопросов
-                            </button>
-                          </>
-                        ) : null}
-                      </>
-                    ) : null}
+                    ) : (
+                      <p className="asg-p">
+                        Нет данных теста. Вернитесь к теории и откройте тест снова.
+                      </p>
+                    )}
                   </section>
                 )}
               </div>
@@ -419,6 +378,16 @@ export default function LessonAsgardPage() {
             </button>
           </div>
         </div>
+      ) : null}
+
+      {isAdmin ? (
+        <AsgardQuizEditorModal
+          key={quizEditorKey}
+          open={quizEditorOpen}
+          spec={quizSpec}
+          onClose={() => setQuizEditorOpen(false)}
+          onSaved={applyQuizSpecUpdate}
+        />
       ) : null}
     </div>
   )

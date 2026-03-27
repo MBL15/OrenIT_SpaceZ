@@ -33,8 +33,11 @@ export default function ClassPage() {
   const credentialRef = useRef('')
   const previewSeqRef = useRef(0)
 
-  if (user?.role === 'teacher' || user?.role === 'admin') {
+  if (user?.role === 'teacher') {
     return <Navigate to="/app/teacher" replace />
+  }
+  if (user?.role === 'admin') {
+    return <Navigate to="/app" replace />
   }
 
   const loadMyClasses = async () => {

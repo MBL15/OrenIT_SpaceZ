@@ -1,4 +1,9 @@
-import { Navigate, Route, Routes, useLocation } from 'react-router-dom'
+import {
+  Navigate,
+  Route,
+  Routes,
+  useLocation,
+} from 'react-router-dom'
 import { useAuth } from './AuthContext'
 import LandingPage from './pages/LandingPage.jsx'
 import LoginPage from './pages/LoginPage.jsx'
@@ -10,6 +15,8 @@ import ProfilePage from './pages/ProfilePage.jsx'
 import LessonAsgardPage from './pages/LessonAsgardPage.jsx'
 import ParentsPage from './pages/ParentsPage.jsx'
 import AssignmentsPage from './pages/AssignmentsPage.jsx'
+import AdminPage from './pages/AdminPage.jsx'
+import { isAdminUser } from './auth.js'
 import './App.css'
 
 function ProtectedRoute({ children }) {
@@ -24,6 +31,18 @@ function ProtectedRoute({ children }) {
 function GuestRoute({ children }) {
   const { user } = useAuth()
   if (user) return <Navigate to="/app" replace />
+  return children
+}
+
+function AdminRoute({ children }) {
+  const { user } = useAuth()
+  const loc = useLocation()
+  if (!user) {
+    return <Navigate to="/login" replace state={{ from: loc }} />
+  }
+  if (!isAdminUser(user)) {
+    return <Navigate to="/app" replace />
+  }
   return children
 }
 
@@ -70,6 +89,14 @@ function App() {
             <ProtectedRoute>
               <TeacherCabinetPage />
             </ProtectedRoute>
+          }
+        />
+        <Route
+          path="/app/admin"
+          element={
+            <AdminRoute>
+              <AdminPage />
+            </AdminRoute>
           }
         />
         <Route

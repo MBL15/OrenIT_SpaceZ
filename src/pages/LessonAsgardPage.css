@@ -269,6 +269,27 @@
   color: #1b5e20;
 }
 
+.asg-test-heading {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  flex-wrap: wrap;
+  width: 100%;
+}
+
+.asg-h2--test {
+  flex: 1 1 auto;
+  min-width: 0;
+}
+
+.asg-theory-actions {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 12px;
+}
+
 .asg-p {
   margin: 0;
   font-size: 15px;

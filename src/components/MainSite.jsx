@@ -111,6 +111,17 @@ const SECTION_TAIL = [
 
 function sectionsForUser(user) {
   const isChild = user?.role === 'child'
+  if (user?.role === 'admin') {
+    return [
+      {
+        id: 'admin_panel',
+        title: 'Админ-панель',
+        btn: 'ОТКРЫТЬ',
+        glyph: '⚙',
+      },
+      ...SECTION_TAIL,
+    ]
+  }
   const roleFirst = isChild
     ? {
         id: 'assignments',
@@ -328,6 +339,10 @@ export default function MainSite({ user, onLogout, onOpenParents }) {
       navigate('/app/teacher')
       return
     }
+    if (id === 'admin_panel') {
+      navigate('/app/admin')
+      return
+    }
     setTab(id)
     setDisplayTab(id)
     setIsClosingTab(false)
@@ -373,6 +388,11 @@ export default function MainSite({ user, onLogout, onOpenParents }) {
                   Мой класс
                 </Link>
               ) : null}
+              {user?.role === 'admin' ? (
+                <Link className="ms-link" to="/app/admin">
+                  Админка
+                </Link>
+              ) : null}
               <Link className="ms-profile" to="/app/profile">
                 <span className="ms-avatar" aria-hidden />
                 <span>Мой профиль</span>
@@ -406,9 +426,11 @@ export default function MainSite({ user, onLogout, onOpenParents }) {
                   Выберите раздел ниже — материалы откроются здесь же.
                   {user?.role === 'child'
                     ? ' Задания от учителя — отдельная страница (первая карточка).'
-                    : user?.role === 'teacher' || user?.role === 'admin'
+                    : user?.role === 'teacher'
                       ? ' Кабинет классов — первая карточка.'
-                      : null}
+                      : user?.role === 'admin'
+                        ? ' Админ-панель — первая карточка или ссылка «Админка» в шапке.'
+                        : null}
                 </p>
               </div>
               <div className="ms-latest-body">
@@ -427,7 +449,9 @@ export default function MainSite({ user, onLogout, onOpenParents }) {
                   <p className="ms-shelf-text">
                     {user?.role === 'child'
                       ? 'Класс и рейтинг — по ссылке в шапке; задания от учителя — первой карточкой.'
-                      : 'Классы и ученики — по первой карточке на этой странице.'}
+                      : user?.role === 'admin'
+                        ? 'Пользователи — в админ-панели.'
+                        : 'Классы и ученики — по первой карточке на этой странице.'}
                   </p>
                 </div>
                 <div className="ms-shelf-item">

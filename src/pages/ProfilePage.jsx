@@ -54,6 +54,15 @@ export default function ProfilePage() {
               Роль: учитель — классы и задания в разделе «Мои классы».
             </p>
           )}
+          {user?.role === 'admin' && (
+            <p className="pf-email" style={{ marginBottom: 12 }}>
+              Роль: администратор —{' '}
+              <Link className="space-link-inline" to="/app/admin">
+                админ-панель
+              </Link>{' '}
+              (управление пользователями).
+            </p>
+          )}
 
           <div className="pf-mascot-wrap">
             <img
