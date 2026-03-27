@@ -50,7 +50,9 @@ function addPoints(amount) {
 export default function LessonAsgardPage() {
   const navigate = useNavigate()
   const [completedView, setCompletedView] = useState(readComplete)
-  const [answer, setAnswer] = useState(null)
+  const [questionStep, setQuestionStep] = useState(1)
+  const [answers, setAnswers] = useState({})
+  const [correctAnswers, setCorrectAnswers] = useState({})
   const [inCutscene, setInCutscene] = useState(true)
   const [lessonStage, setLessonStage] = useState('theory')
   const [cutsceneIndex, setCutsceneIndex] = useState(0)
@@ -85,6 +87,11 @@ export default function LessonAsgardPage() {
       setLastAwardedPoints(addPoints(LESSON_REWARD))
     }
     setShowCorrectModal(true)
+  }
+
+  const handleQuestionAnswer = (step, optionId, isCorrect) => {
+    setAnswers((prev) => ({ ...prev, [step]: optionId }))
+    setCorrectAnswers((prev) => ({ ...prev, [step]: isCorrect }))
   }
 
   if (completedView) {
@@ -122,7 +129,9 @@ export default function LessonAsgardPage() {
                       /* ignore */
                     }
                     setCompletedView(false)
-                    setAnswer(null)
+                    setAnswers({})
+                    setCorrectAnswers({})
+                    setQuestionStep(1)
                     setShowCorrectModal(false)
                     setLessonStage('theory')
                     setInCutscene(true)
@@ -157,7 +166,7 @@ export default function LessonAsgardPage() {
               </div>
 
               <div
-                className="asg-cutscene-stage"
+                className="asg-cutscene-stage asg-cutscene-stage--bg-only"
                 style={{ backgroundImage: `url(${asgardCutsceneBgUrl})` }}
                 onClick={goToNextReplica}
               >
@@ -232,7 +241,10 @@ export default function LessonAsgardPage() {
                     <button
                       type="button"
                       className="asg-btn-primary"
-                      onClick={() => setLessonStage('test')}
+                      onClick={() => {
+                        setQuestionStep(1)
+                        setLessonStage('test')
+                      }}
                     >
                       Перейти к тесту
                     </button>
@@ -240,39 +252,122 @@ export default function LessonAsgardPage() {
                 ) : (
                   <section className="asg-block" aria-labelledby="asg-task-placeholder">
                     <h2 id="asg-task-placeholder" className="asg-h2">
-                      Тест (заглушка)
+                      Тест (вопрос {questionStep} из 3)
                     </h2>
-                    <p className="asg-p">
-                      После теории ученик переходит на тест. Пока — макет вариантов ответа и
-                      терминала.
-                    </p>
-                    <div className="asg-quiz" role="group" aria-label="Варианты ответа">
-                      {[
-                        { id: 'a', text: 'Логика учит проверять условия и делать выводы', correct: true },
-                        { id: 'b', text: 'Логика нужна только для сложения чисел', correct: false },
-                        { id: 'c', text: 'Логика не связана с решением задач', correct: false },
-                      ].map((opt) => (
-                        <button
-                          key={opt.id}
-                          type="button"
-                          className={`asg-option${answer === opt.id ? ' asg-option--picked' : ''}`}
-                          onClick={() => {
-                            setAnswer(opt.id)
-                            if (opt.correct) handleCorrectAnswer()
-                          }}
-                        >
-                          {opt.text}
-                        </button>
-                      ))}
-                    </div>
-                    <div className="asg-terminal" role="region" aria-label="Терминал">
-                      <div className="asg-terminal-head">Терминал (заглушка)</div>
-                      <pre className="asg-terminal-body">
-{`$ python quest.py
-> Ожидание ввода...
-> Здесь будет интерактив задания.`}
-                      </pre>
-                    </div>
+                    {questionStep === 1 ? (
+                      <>
+                        <p className="asg-p">
+                          Дано выражение <strong>¬A ∧ B ∨ C</strong>, где A=1, B=0, C=1.
+                          Каково значение выражения с приоритетом (¬, затем ∧, затем ∨)?
+                        </p>
+                        <div className="asg-quiz" role="group" aria-label="Варианты ответа вопроса 1">
+                          {[
+                            { id: 'a', text: 'А) Истина (1)', correct: true },
+                            { id: 'b', text: 'Б) Ложь (0)', correct: false },
+                            { id: 'c', text: 'В) Зависит от порядка вычислений', correct: false },
+                          ].map((opt) => (
+                            <button
+                              key={opt.id}
+                              type="button"
+                              className={`asg-option${answers[1] === opt.id ? ' asg-option--picked' : ''}${answers[1] === opt.id && !opt.correct ? ' asg-option--wrong' : ''}`}
+                              onClick={() => handleQuestionAnswer(1, opt.id, opt.correct)}
+                            >
+                              {opt.text}
+                            </button>
+                          ))}
+                        </div>
+                        {correctAnswers[1] ? (
+                          <>
+                            <p className="asg-p">Да, правильно!</p>
+                            <button
+                              type="button"
+                              className="asg-btn-primary"
+                              onClick={() => setQuestionStep(2)}
+                            >
+                              Перейти к вопросу 2
+                            </button>
+                          </>
+                        ) : null}
+                      </>
+                    ) : null}
+
+                    {questionStep === 2 ? (
+                      <>
+                        <p className="asg-p">
+                          Известны законы де Моргана: ¬(A ∧ B) = ¬A ∨ ¬B и ¬(A ∨ B) = ¬A ∧ ¬B.
+                          Выберите выражение, которое логически эквивалентно выражению
+                          <strong> ¬(¬X ∨ Y)</strong>.
+                        </p>
+                        <div className="asg-quiz" role="group" aria-label="Варианты ответа вопроса 2">
+                          {[
+                            { id: 'a', text: 'А) X ∧ ¬Y', correct: true },
+                            { id: 'b', text: 'Б) ¬X ∨ ¬Y', correct: false },
+                            { id: 'c', text: 'В) X ∨ ¬Y', correct: false },
+                          ].map((opt) => (
+                            <button
+                              key={opt.id}
+                              type="button"
+                              className={`asg-option${answers[2] === opt.id ? ' asg-option--picked' : ''}${answers[2] === opt.id && !opt.correct ? ' asg-option--wrong' : ''}`}
+                              onClick={() => handleQuestionAnswer(2, opt.id, opt.correct)}
+                            >
+                              {opt.text}
+                            </button>
+                          ))}
+                        </div>
+                        {correctAnswers[2] ? (
+                          <>
+                            <p className="asg-p">Да, правильно!</p>
+                            <button
+                              type="button"
+                              className="asg-btn-primary"
+                              onClick={() => setQuestionStep(3)}
+                            >
+                              Перейти к вопросу 3
+                            </button>
+                          </>
+                        ) : null}
+                      </>
+                    ) : null}
+
+                    {questionStep === 3 ? (
+                      <>
+                        <p className="asg-p">
+                          В школе разбили окно. Анна сказала: «Это сделал Борис». Борис сказал:
+                          «Это сделала Галина». Виктор сказал: «Я этого не делал». Галина сказала:
+                          «Борис лжёт, когда говорит, что это сделала я». Известно, что правду
+                          сказал ровно один ученик. Кто разбил окно?
+                        </p>
+                        <div className="asg-quiz" role="group" aria-label="Варианты ответа вопроса 3">
+                          {[
+                            { id: 'a', text: 'А) Анна', correct: false },
+                            { id: 'b', text: 'Б) Борис', correct: false },
+                            { id: 'c', text: 'В) Виктор', correct: true },
+                            { id: 'd', text: 'Г) Галина', correct: false },
+                          ].map((opt) => (
+                            <button
+                              key={opt.id}
+                              type="button"
+                              className={`asg-option${answers[3] === opt.id ? ' asg-option--picked' : ''}${answers[3] === opt.id && !opt.correct ? ' asg-option--wrong' : ''}`}
+                              onClick={() => handleQuestionAnswer(3, opt.id, opt.correct)}
+                            >
+                              {opt.text}
+                            </button>
+                          ))}
+                        </div>
+                        {correctAnswers[3] ? (
+                          <>
+                            <p className="asg-p">Да, правильно!</p>
+                            <button
+                              type="button"
+                              className="asg-btn-primary"
+                              onClick={handleCorrectAnswer}
+                            >
+                              Завершить блок вопросов
+                            </button>
+                          </>
+                        ) : null}
+                      </>
+                    ) : null}
                   </section>
                 )}
               </div>
