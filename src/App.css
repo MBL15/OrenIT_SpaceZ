@@ -2,20 +2,29 @@
 .space-root {
   --se-green: #4caf50;
   --se-green-hover: #43a047;
-  --se-green-dark: #2e7d32;
-  --se-page: #2e2e32;
+  --se-green-dark: #1b5e20;
+  --se-page: #2a2d32;
   --se-card: #ffffff;
-  --se-border: #e0e0e0;
+  --se-border: #e3e6e8;
   --se-text: #2e7d32;
   --se-text-body: #424242;
+  width: 100%;
+  max-width: 100%;
   min-height: 100svh;
-  font-family: system-ui, 'Segoe UI', Roboto, sans-serif;
+  margin: 0;
+  text-align: initial;
+  box-sizing: border-box;
+  font-family: system-ui, -apple-system, 'Segoe UI', Roboto, 'Helvetica Neue', Arial,
+    sans-serif;
   color-scheme: light;
 }
 
 .space-page {
   min-height: 100svh;
-  background: var(--se-page);
+  background:
+    radial-gradient(ellipse 90% 60% at 50% -10%, rgba(102, 187, 106, 0.18), transparent 50%),
+    radial-gradient(ellipse 50% 40% at 100% 100%, rgba(67, 160, 71, 0.1), transparent 45%),
+    var(--se-page);
   color: var(--se-text-body);
   box-sizing: border-box;
 }
@@ -129,7 +138,17 @@
   border: 2px solid transparent;
   cursor: pointer;
   font-family: inherit;
-  transition: background 0.15s, color 0.15s, border-color 0.15s;
+  transition:
+    background 0.18s ease,
+    color 0.18s ease,
+    border-color 0.18s ease,
+    box-shadow 0.18s ease,
+    transform 0.15s ease;
+}
+
+.space-btn:focus-visible {
+  outline: 2px solid rgba(76, 175, 80, 0.65);
+  outline-offset: 2px;
 }
 
 .space-btn--primary {
@@ -142,6 +161,7 @@
   background: var(--se-green-hover);
   border-color: var(--se-green-hover);
   color: #fff;
+  box-shadow: 0 4px 16px rgba(76, 175, 80, 0.35);
 }
 
 .space-btn--outline {
@@ -179,11 +199,19 @@
   color: var(--se-green-dark);
   font-weight: 600;
   text-decoration: none;
+  border-radius: 6px;
+  padding: 2px 4px;
+  margin: -2px -4px;
 }
 
 .space-link:hover {
   text-decoration: underline;
   text-underline-offset: 3px;
+}
+
+.space-link:focus-visible {
+  outline: 2px solid var(--se-green);
+  outline-offset: 2px;
 }
 
 .space-link-inline {
@@ -208,11 +236,13 @@
 .space-auth-card {
   width: 100%;
   max-width: 420px;
-  background: var(--se-card);
+  background: linear-gradient(180deg, #fafdfb 0%, var(--se-card) 100%);
   border: 1px solid var(--se-border);
-  border-radius: 16px;
-  padding: 28px 28px 24px;
-  box-shadow: 0 12px 40px rgba(0, 0, 0, 0.35);
+  border-radius: 20px;
+  padding: 30px 28px 26px;
+  box-shadow:
+    0 1px 3px rgba(0, 0, 0, 0.04),
+    0 16px 48px rgba(0, 0, 0, 0.28);
 }
 
 .space-auth-back {
@@ -263,17 +293,25 @@
 
 .space-input {
   padding: 12px 14px;
+  min-height: 48px;
+  box-sizing: border-box;
   border: 1px solid var(--se-border);
-  border-radius: 10px;
+  border-radius: 12px;
   font-size: 16px;
   font-family: inherit;
   color: var(--se-text-body);
+  transition: border-color 0.2s ease, box-shadow 0.2s ease;
+}
+
+.space-input:hover {
+  border-color: rgba(76, 175, 80, 0.35);
 }
 
 .space-input:focus {
   outline: 2px solid rgba(76, 175, 80, 0.45);
   outline-offset: 1px;
   border-color: var(--se-green);
+  box-shadow: 0 0 0 3px rgba(76, 175, 80, 0.12);
 }
 
 .space-form-error {

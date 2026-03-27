@@ -11,9 +11,10 @@ const MAP_LESSONS = [
     top: 84,
     leftAdjustPx: -6,
     title: 'Асгард',
-    description:
-      'Первая остановка на карте знаний. Здесь начинается путь в основы информатики: познакомьтесь с форматом курса и выполните вводные задания.',
-    cta: 'Начать заниматься',
+    drawerTitle: 'Асгард — старт вашего приключения.',
+    drawerBody:
+      'Здесь вы задаёте темп всему маршруту: короткие смысловые блоки, сразу практика и ясное «что дальше». Пройдите вводную локацию, чтобы согласовать ожидания с форматом курса и спокойно двигаться к следующим точкам на карте.',
+    startPath: '/app/lesson/asgard',
   },
   {
     n: 2,
@@ -21,9 +22,10 @@ const MAP_LESSONS = [
     top: 86,
     leftAdjustPx: 33,
     topAdjustPx: 22,
-    title: 'Урок 2',
-    description: 'Содержание этого этапа скоро появится. Следите за обновлениями.',
-    cta: 'Начать заниматься',
+    title: 'Йотунхейм — встреча с драконом',
+    drawerTitle: 'Йотунхейм — встреча с драконом.',
+    drawerBody:
+      'В ледяных просторах вас ждёт не просто задача, а настоящая «встреча с драконом»: плотное испытание, где важны хладнокровие и точный расчёт. Соберите всё, что уже освоили, и пройдите его без спешки — победа измеряется ясностью решения, а не скоростью.',
   },
   {
     n: 3,
@@ -31,9 +33,10 @@ const MAP_LESSONS = [
     top: 71,
     leftAdjustPx: 15,
     topAdjustPx: 3,
-    title: 'Урок 3',
-    description: 'Содержание этого этапа скоро появится.',
-    cta: 'Начать заниматься',
+    title: 'Ванахейм — знакомство с землёй',
+    drawerTitle: 'Ванахейм — знакомство с землёй.',
+    drawerBody:
+      'Здесь вы буквально «познакомитесь с землёй»: задачи про земледелие и всё, что с ним связано — посевы и сроки, полив и урожай, ротацию грядок, подсчёт урожая и простые схемы хозяйства. Как настоящий участок, материал учит планировать циклы, считать ресурсы и видеть результат не сразу, а после «сезона» практики.',
   },
   {
     n: 4,
@@ -41,9 +44,10 @@ const MAP_LESSONS = [
     top: 48,
     leftAdjustPx: 138,
     topAdjustPx: 38,
-    title: 'Урок 4',
-    description: 'Содержание этого этапа скоро появится.',
-    cta: 'Начать заниматься',
+    title: 'Мидгард — мир людей',
+    drawerTitle: 'Мидгард — мир людей.',
+    drawerBody:
+      'Мидгард — мир людей, где решения принимаются шаг за шагом: здесь вы разберёте задачи с условными операторами и циклами. Научитесь ветвить логику («если… иначе»), повторять действия, пока выполняется условие, и обходить данные по кругу — как в обычной жизни: сначала проверка, потом действие, иногда снова и снова, пока цель не достигнута.',
   },
   {
     n: 5,
@@ -51,9 +55,10 @@ const MAP_LESSONS = [
     top: 40,
     leftAdjustPx: 64,
     topAdjustPx: -93,
-    title: 'Урок 5',
-    description: 'Содержание этого этапа скоро появится.',
-    cta: 'Начать заниматься',
+    title: 'Муспельхейм — огонь логики',
+    drawerTitle: 'Муспельхейм — огонь логики.',
+    drawerBody:
+      'Начать осваивать таблицы истинности — главная цель этой локации. Муспельхейм — огонь логики: вы разберёте, как из простых истин и лжи складывается сложное выражение. Как пламя не терпит полумер, булевы операции требуют ясности — шаг за шагом вы научитесь строить и проверять каждую строку таблицы.',
   },
   {
     n: 6,
@@ -61,9 +66,10 @@ const MAP_LESSONS = [
     top: 20,
     leftAdjustPx: 96,
     topAdjustPx: 115,
-    title: 'Урок 6',
-    description: 'Содержание этого этапа скоро появится.',
-    cta: 'Начать заниматься',
+    title: 'Нифльхейм — ряды в тумане',
+    drawerTitle: 'Нифльхейм — ряды в тумане.',
+    drawerBody:
+      'В холодном тумане Нифльхейма ничего не видно целиком — только следующий шаг по нумерованной цепочке ячеек. Здесь вы работаете с массивами: индексы ведут от первого элемента к последнему, можно заполнять ряд, читать значение по номеру и обходить всю «решётку» шаг за шагом, пока мгла не рассеется в ясную картину данных. Решив все задачи этой локации, вы откроете путь к мосту Бифрёсту, ведущему к следующему пункту маршрута.',
   },
   {
     n: 7,
@@ -71,9 +77,10 @@ const MAP_LESSONS = [
     top: 22,
     leftAdjustPx: 39,
     topAdjustPx: 65,
-    title: 'Урок 7',
-    description: 'Содержание этого этапа скоро появится.',
-    cta: 'Начать заниматься',
+    title: 'Альвхейм — сплетение принципов',
+    drawerTitle: 'Альвхейм — сплетение принципов.',
+    drawerBody:
+      'В светлом Альвхейме вас ждут алгоритмические задачи, в которых переплетается всё, что вы уже прошли: условия и циклы, логика и таблицы истинности, работа с массивами и ясное пошаговое мышление. Здесь нельзя опереться на один приём — нужно собрать маршрут из ранее освоенных идей и довести решение до изящного, цельного результата.',
   },
   {
     n: 8,
@@ -81,9 +88,10 @@ const MAP_LESSONS = [
     top: 46,
     leftAdjustPx: 132,
     topAdjustPx: 99,
-    title: 'Урок 8',
-    description: 'Содержание этого этапа скоро появится.',
-    cta: 'Начать заниматься',
+    title: 'Иггдрасиль',
+    drawerTitle: 'Иггдрасиль — ствол, что связывает миры.',
+    drawerBody:
+      'Древо Иггдрасиля соединяет всё, что вы прошли: финальный аккорд — язык Python как мост между идеей и реализацией. Здесь вы соберёте маршрут целиком и увидите, как отдельные «миры» курса складываются в одну картину.',
   },
 ]
 
@@ -170,7 +178,8 @@ function SectionGrid({ onOpen, canOpenLatest }) {
   )
 }
 
-function LessonModal({ lesson, onClose }) {
+/** Панель справа для любой точки на карте (основы информатики) */
+function RealmLessonDrawer({ lesson, onClose }) {
   const navigate = useNavigate()
 
   useEffect(() => {
@@ -189,24 +198,24 @@ function LessonModal({ lesson, onClose }) {
 
   if (!lesson) return null
 
+  const titleId = `ms-realm-drawer-title-${lesson.n}`
+
   const handleStart = () => {
-    if (lesson.n === 1) {
-      navigate('/app/lesson/asgard')
-    }
+    if (lesson.startPath) navigate(lesson.startPath)
     onClose()
   }
 
   return (
     <div
-      className="ms-modal-backdrop"
+      className="ms-product-drawer-backdrop"
       role="presentation"
       onClick={onClose}
     >
-      <div
-        className="ms-modal"
+      <aside
+        className="ms-product-drawer"
         role="dialog"
         aria-modal="true"
-        aria-labelledby="ms-modal-title"
+        aria-labelledby={titleId}
         onClick={(e) => e.stopPropagation()}
       >
         <button
@@ -217,26 +226,29 @@ function LessonModal({ lesson, onClose }) {
         >
           ×
         </button>
-        <h2 id="ms-modal-title" className="ms-modal-title">
-          {lesson.title}
+        <h2 id={titleId} className="ms-product-drawer-title">
+          {lesson.drawerTitle}
         </h2>
-        <p className="ms-modal-text">{lesson.description}</p>
-        <p className="ms-modal-offer">
-          Готовы приступить к занятиям в этой точке маршрута?
-        </p>
-        <div className="ms-modal-actions">
+        <p className="ms-product-drawer-text">{lesson.drawerBody}</p>
+        <div className="ms-product-drawer-actions">
+          {lesson.startPath ? (
+            <button type="button" className="ms-modal-cta" onClick={handleStart}>
+              Начать приключение
+            </button>
+          ) : (
+            <button type="button" className="ms-modal-secondary" disabled>
+              Скоро в курсе
+            </button>
+          )}
           <button
             type="button"
-            className="ms-modal-cta"
-            onClick={handleStart}
+            className="ms-modal-secondary"
+            onClick={onClose}
           >
-            {lesson.cta}
-          </button>
-          <button type="button" className="ms-modal-secondary" onClick={onClose}>
-            Позже
+            Вернуться к карте
           </button>
         </div>
-      </div>
+      </aside>
     </div>
   )
 }
@@ -269,16 +281,18 @@ function CourseMap() {
                     : `${lesson.top}%`,
               }}
               aria-label={`Урок ${lesson.n}: ${lesson.title}`}
-              title={`Урок ${lesson.n}`}
+              title={`Урок ${lesson.n}: ${lesson.title}`}
               onClick={() => setActiveLesson(lesson)}
             />
           ))}
         </div>
       </figure>
-      <LessonModal
-        lesson={activeLesson}
-        onClose={() => setActiveLesson(null)}
-      />
+      {activeLesson ? (
+        <RealmLessonDrawer
+          lesson={activeLesson}
+          onClose={() => setActiveLesson(null)}
+        />
+      ) : null}
     </>
   )
 }
@@ -328,11 +342,14 @@ export default function MainSite({ user, onLogout }) {
                   ◆
                 </span>
                 SpacEdu
+                {user?.name ? (
+                  <span className="ms-brand-user">{user.name}</span>
+                ) : null}
               </span>
-              <a href="#parent" className="ms-pill">
+              <Link className="ms-pill" to="/app/parents">
                 <IconChart />
-                Родителю
-              </a>
+                Родителям
+              </Link>
             </div>
             <div className="ms-topbar-right">
               <Link className="ms-link" to="/app/class">
@@ -364,23 +381,70 @@ export default function MainSite({ user, onLogout }) {
           )}
 
           {tab === 'latest' && (
-            <SectionGrid
-              onOpen={openSection}
-              canOpenLatest={Boolean(lastVisitedId)}
-            />
+            <div className="ms-latest-stack">
+              <div className="ms-intro">
+                <h2 className="ms-intro-title">Добро пожаловать</h2>
+                <p className="ms-intro-text">
+                  Выберите раздел ниже — материалы откроются здесь же. Пункт
+                  «Последнее» вернёт к последнему открытому разделу.
+                </p>
+              </div>
+              <div className="ms-latest-body">
+                <SectionGrid
+                  onOpen={openSection}
+                  canOpenLatest={Boolean(lastVisitedId)}
+                />
+              </div>
+              <aside className="ms-shelf" aria-label="Подсказки по кабинету">
+                <div className="ms-shelf-item">
+                  <span className="ms-shelf-kicker">Навигация</span>
+                  <p className="ms-shelf-text">
+                    Разделы открываются на этой же странице — не нужно искать
+                    меню в другом месте.
+                  </p>
+                </div>
+                <div className="ms-shelf-item">
+                  <span className="ms-shelf-kicker">Мой класс</span>
+                  <p className="ms-shelf-text">
+                    Журнал, задания и одноклассники — через ссылку в шапке.
+                  </p>
+                </div>
+                <div className="ms-shelf-item">
+                  <span className="ms-shelf-kicker">Помощь</span>
+                  <p className="ms-shelf-text">
+                    Кнопка «?» внизу справа — уведомления и ответы на частые
+                    вопросы.
+                  </p>
+                </div>
+              </aside>
+            </div>
           )}
-          {tab === 'cs' && <CourseMap />}
+          {tab === 'cs' && (
+            <div className="ms-cs-stack">
+              <p className="ms-page-hint" role="note">
+                Нажмите на круг с номером урока — справа откроется карточка локации
+                с кратким вступлением и кнопками.
+              </p>
+              <div className="ms-map-stage">
+                <CourseMap />
+              </div>
+            </div>
+          )}
           {tab === 'product' && (
-            <Placeholder
-              title="Продуктовая разработка"
-              text="Здесь появятся курсы и треки по продуктовой разработке."
-            />
+            <div className="ms-subpage-fill">
+              <Placeholder
+                title="Продуктовая разработка"
+                text="Раздел в разработке."
+              />
+            </div>
           )}
           {tab === 'olympiad' && (
-            <Placeholder
-              title="Олимпиады"
-              text="Раздел олимпиад в разработке."
-            />
+            <div className="ms-subpage-fill">
+              <Placeholder
+                title="Олимпиады"
+                text="Раздел олимпиад в разработке."
+              />
+            </div>
           )}
         </main>
       </div>

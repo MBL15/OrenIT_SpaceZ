@@ -7,6 +7,7 @@ import DashboardPage from './pages/DashboardPage.jsx'
 import ClassPage from './pages/ClassPage.jsx'
 import ProfilePage from './pages/ProfilePage.jsx'
 import LessonAsgardPage from './pages/LessonAsgardPage.jsx'
+import ParentsPage from './pages/ParentsPage.jsx'
 import './App.css'
 
 function ProtectedRoute({ children }) {
@@ -66,6 +67,14 @@ function App() {
           element={
             <ProtectedRoute>
               <ProfilePage />
+            </ProtectedRoute>
+          }
+        />
+        <Route
+          path="/app/parents"
+          element={
+            <ProtectedRoute>
+              <ParentsPage />
             </ProtectedRoute>
           }
         />
