@@ -4,9 +4,21 @@ import { useAuth } from '../AuthContext.jsx'
 import mascotUrl from '../assets/mascot.png'
 import './ProfilePage.css'
 
+const POINTS_KEY = 'spaceedu-points'
+
+function readCoins() {
+  try {
+    const raw = Number(localStorage.getItem(POINTS_KEY) || '0')
+    return Number.isFinite(raw) && raw > 0 ? Math.floor(raw) : 0
+  } catch {
+    return 0
+  }
+}
+
 export default function ProfilePage() {
   const { user } = useAuth()
   const [hint, setHint] = useState('')
+  const [coins] = useState(readCoins)
 
   const displayName = user?.name?.trim() || user?.email || 'Ученик'
 
@@ -21,6 +33,10 @@ export default function ProfilePage() {
 
         <main className="pf-main">
           <h1 className="pf-username">{displayName}</h1>
+          <div className="pf-coins" aria-label="Баланс коинов">
+            <span className="pf-coins-label">Баланс коинов</span>
+            <strong className="pf-coins-value">{coins}</strong>
+          </div>
 
           <div className="pf-mascot-wrap">
             <img

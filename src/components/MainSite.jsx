@@ -95,6 +95,14 @@ const MAP_LESSONS = [
   },
 ]
 
+// Базовый размер, относительно которого были подобраны px-смещения на карте.
+// Конвертируем их в проценты, чтобы точки масштабировались вместе с изображением.
+const MAP_REFERENCE_SIZE_PX = 1000
+
+function toResponsivePercent(basePercent, adjustPx = 0) {
+  return basePercent + (adjustPx / MAP_REFERENCE_SIZE_PX) * 100
+}
+
 const SECTIONS = [
   { id: 'latest', title: 'Последнее', btn: 'ПЕРЕЙТИ', glyph: '≡' },
   { id: 'cs', title: 'Основы информатики', btn: 'ПЕРЕЙТИ', glyph: '</>' },
@@ -271,14 +279,8 @@ function CourseMap() {
               type="button"
               className={`ms-map-hit${lesson.n >= 1 && lesson.n <= 8 ? ' ms-map-hit--asgard' : ''}`}
               style={{
-                left:
-                  lesson.leftAdjustPx != null
-                    ? `calc(${lesson.left}% + ${lesson.leftAdjustPx}px)`
-                    : `${lesson.left}%`,
-                top:
-                  lesson.topAdjustPx != null
-                    ? `calc(${lesson.top}% + ${lesson.topAdjustPx}px)`
-                    : `${lesson.top}%`,
+                left: `${toResponsivePercent(lesson.left, lesson.leftAdjustPx)}%`,
+                top: `${toResponsivePercent(lesson.top, lesson.topAdjustPx)}%`,
               }}
               aria-label={`Урок ${lesson.n}: ${lesson.title}`}
               title={`Урок ${lesson.n}: ${lesson.title}`}
@@ -310,6 +312,8 @@ export default function MainSite({ user, onLogout }) {
   const location = useLocation()
   const navigate = useNavigate()
   const [tab, setTab] = useState('latest')
+  const [displayTab, setDisplayTab] = useState('latest')
+  const [isClosingTab, setIsClosingTab] = useState(false)
   const [lastVisitedId, setLastVisitedId] = useState(readLastTab)
 
   useEffect(() => {
@@ -321,14 +325,35 @@ export default function MainSite({ user, onLogout }) {
     }
   }, [location.state, location.pathname, navigate])
 
+  useEffect(() => {
+    if (!isClosingTab) return undefined
+    const timer = window.setTimeout(() => {
+      setDisplayTab(tab)
+      setIsClosingTab(false)
+    }, 260)
+    return () => window.clearTimeout(timer)
+  }, [isClosingTab, tab])
+
   const openSection = (id) => {
     if (id === 'latest') {
-      if (lastVisitedId) setTab(lastVisitedId)
+      if (lastVisitedId) {
+        setTab(lastVisitedId)
+        setDisplayTab(lastVisitedId)
+        setIsClosingTab(false)
+      }
       return
     }
     setLastVisitedId(id)
     writeLastTab(id)
     setTab(id)
+    setDisplayTab(id)
+    setIsClosingTab(false)
+  }
+
+  const closeCurrentTab = () => {
+    if (tab === 'latest') return
+    setIsClosingTab(true)
+    setTab('latest')
   }
 
   return (
@@ -368,20 +393,20 @@ export default function MainSite({ user, onLogout }) {
         </header>
 
         <main className="ms-main">
-          {tab !== 'latest' && (
+          {displayTab !== 'latest' && (
             <div className="ms-back">
               <button
                 type="button"
                 className="ms-back-btn"
-                onClick={() => setTab('latest')}
+                onClick={closeCurrentTab}
               >
                 ← К разделам
               </button>
             </div>
           )}
 
-          {tab === 'latest' && (
-            <div className="ms-latest-stack">
+          {displayTab === 'latest' && (
+            <div className={`ms-latest-stack${isClosingTab ? ' ms-latest-stack--enter' : ''}`}>
               <div className="ms-intro">
                 <h2 className="ms-intro-title">Добро пожаловать</h2>
                 <p className="ms-intro-text">
@@ -419,8 +444,8 @@ export default function MainSite({ user, onLogout }) {
               </aside>
             </div>
           )}
-          {tab === 'cs' && (
-            <div className="ms-cs-stack">
+          {displayTab === 'cs' && (
+            <div className={`ms-cs-stack${isClosingTab ? ' ms-tab-closing' : ''}`}>
               <p className="ms-page-hint" role="note">
                 Нажмите на круг с номером урока — справа откроется карточка локации
                 с кратким вступлением и кнопками.
@@ -430,16 +455,16 @@ export default function MainSite({ user, onLogout }) {
               </div>
             </div>
           )}
-          {tab === 'product' && (
-            <div className="ms-subpage-fill">
+          {displayTab === 'product' && (
+            <div className={`ms-subpage-fill${isClosingTab ? ' ms-tab-closing' : ''}`}>
               <Placeholder
                 title="Продуктовая разработка"
                 text="Раздел в разработке."
               />
             </div>
           )}
-          {tab === 'olympiad' && (
-            <div className="ms-subpage-fill">
+          {displayTab === 'olympiad' && (
+            <div className={`ms-subpage-fill${isClosingTab ? ' ms-tab-closing' : ''}`}>
               <Placeholder
                 title="Олимпиады"
                 text="Раздел олимпиад в разработке."

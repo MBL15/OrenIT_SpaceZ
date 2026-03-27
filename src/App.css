@@ -274,6 +274,54 @@
   opacity: 0.9;
 }
 
+.space-role-select {
+  display: grid;
+  grid-template-columns: 1fr;
+  gap: 10px;
+  margin-bottom: 10px;
+}
+
+.space-role-btn {
+  min-height: 48px;
+  border-radius: 12px;
+  border: 1px solid var(--se-border);
+  background: #fff;
+  color: var(--se-green-dark);
+  font-family: inherit;
+  font-size: 15px;
+  font-weight: 700;
+  cursor: pointer;
+  transition: background 0.2s ease, border-color 0.2s ease, box-shadow 0.2s ease;
+}
+
+.space-role-btn:hover {
+  background: rgba(76, 175, 80, 0.08);
+  border-color: rgba(76, 175, 80, 0.4);
+  box-shadow: 0 6px 18px rgba(76, 175, 80, 0.16);
+}
+
+.space-role-note {
+  margin: 0 0 4px;
+  font-size: 13px;
+  font-weight: 600;
+  color: #2e7d32;
+  text-align: left;
+}
+
+.space-role-change {
+  align-self: flex-start;
+  margin: 0;
+  padding: 0;
+  border: none;
+  background: none;
+  color: var(--se-green-dark);
+  font-size: 13px;
+  font-weight: 600;
+  text-decoration: underline;
+  text-underline-offset: 3px;
+  cursor: pointer;
+}
+
 .space-form {
   display: flex;
   flex-direction: column;
