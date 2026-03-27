@@ -16,6 +16,7 @@ from app.models import (
     User,
 )
 from app.access import hash_password
+from app.asgard_platform import asgard_checker_json, asgard_teacher_task_specs
 from app.services import ensure_user_economy_rows
 
 
@@ -65,13 +66,24 @@ def seed_if_empty(db: Session) -> None:
     db.add_all(items)
     db.flush()
 
-    l1 = Lesson(title="Урок 1. Сложение", sort_order=1, is_published=True, created_at=_now_iso())
-    l2 = Lesson(title="Урок 2. Вычитание", sort_order=2, is_published=True, created_at=_now_iso())
-    db.add_all([l1, l2])
+    asgard_title = "Основы информатики — Асгард"
+    lasgard = Lesson(title=asgard_title, sort_order=1, is_published=True, created_at=_now_iso())
+    l1 = Lesson(title="Урок 1. Сложение", sort_order=2, is_published=False, created_at=_now_iso())
+    l2 = Lesson(title="Урок 2. Вычитание", sort_order=3, is_published=False, created_at=_now_iso())
+    db.add_all([lasgard, l1, l2])
     db.flush()
 
     db.add_all(
         [
+            LessonTheoryBlock(
+                lesson_id=lasgard.id,
+                sort_order=1,
+                body_markdown=(
+                    "Интерактивный урок с катсценой — на карте **«Асгард»**. "
+                    "Там три вопроса с теми же формулировками и вариантами, что в каталоге для учителя; "
+                    "прохождение на карте и задание от учителя на платформе **не связаны**."
+                ),
+            ),
             LessonTheoryBlock(
                 lesson_id=l1.id,
                 sort_order=1,
@@ -91,8 +103,23 @@ def seed_if_empty(db: Session) -> None:
         ]
     )
 
+    asgard_templates = [
+        TaskTemplate(
+            lesson_id=lasgard.id,
+            sort_order=row["sort_order"],
+            title=row["title"],
+            prompt_template=row["prompt"],
+            param_spec_json="{}",
+            checker_type="numeric",
+            checker_config_json=asgard_checker_json(row),
+            assignable_by_teacher=True,
+            counts_toward_lesson_practice=False,
+        )
+        for row in asgard_teacher_task_specs()
+    ]
     db.add_all(
         [
+            *asgard_templates,
             TaskTemplate(
                 lesson_id=l1.id,
                 sort_order=1,
@@ -101,6 +128,8 @@ def seed_if_empty(db: Session) -> None:
                 param_spec_json='{"a":{"min":2,"max":12},"b":{"min":2,"max":12}}',
                 checker_type="numeric",
                 checker_config_json='{"kind":"binary","op":"+","left":"a","right":"b"}',
+                assignable_by_teacher=False,
+                counts_toward_lesson_practice=True,
             ),
             TaskTemplate(
                 lesson_id=l2.id,
@@ -110,6 +139,8 @@ def seed_if_empty(db: Session) -> None:
                 param_spec_json='{"a":{"min":10,"max":25},"b":{"min":1,"max":9}}',
                 checker_type="numeric",
                 checker_config_json='{"kind":"binary","op":"-","left":"a","right":"b"}',
+                assignable_by_teacher=False,
+                counts_toward_lesson_practice=True,
             ),
         ]
     )

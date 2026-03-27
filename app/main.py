@@ -14,7 +14,12 @@ from app.routes_learning import learning_router
 from app.routes_play import play_router
 from app.routes_staff import admin_router, teacher_router
 from app.seed import seed_if_empty
-from app.sqlite_migrate import apply_sqlite_migrations, backfill_class_invite_codes
+from app.asgard_platform import sync_asgard_lesson_tasks
+from app.sqlite_migrate import (
+    apply_sqlite_migrations,
+    backfill_class_invite_codes,
+    ensure_teacher_assignable_platform,
+)
 
 
 @asynccontextmanager
@@ -26,6 +31,8 @@ async def lifespan(_: FastAPI):
     try:
         backfill_class_invite_codes(db)
         seed_if_empty(db)
+        ensure_teacher_assignable_platform(db)
+        sync_asgard_lesson_tasks(db)
     finally:
         db.close()
     yield

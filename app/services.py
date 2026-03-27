@@ -10,6 +10,7 @@ from sqlalchemy import func
 from sqlalchemy.orm import Session
 
 from app.models import (
+    CurrencyTransaction,
     Lesson,
     LessonProgress,
     TaskAttempt,
@@ -56,6 +57,15 @@ def compute_expected(
     if checker_type != "numeric":
         raise ValueError("only numeric checker implemented")
     kind = cfg.get("kind", "binary")
+    if kind == "literal":
+        if "expected" not in cfg:
+            raise ValueError("literal checker requires expected")
+        return str(cfg["expected"])
+    if kind == "choice":
+        eid = cfg.get("expected_choice_id")
+        if not eid or not isinstance(eid, str):
+            raise ValueError("choice checker requires expected_choice_id")
+        return str(eid).strip()
     if kind != "binary":
         raise ValueError("unsupported kind")
     op = cfg.get("op", "+")
@@ -131,18 +141,38 @@ def grant_lesson_completion_xp_if_eligible(
     lesson_id: int,
     xp_amount: int,
     *,
+    coin_amount: int = 0,
     max_wrong: int = 2,
-) -> int:
-    """Если теория и практика пройдены и бонус ещё не выдан — начисляет XP и помечает урок."""
+) -> tuple[int, int]:
+    """Если теория и практика пройдены и бонус ещё не выдан — начисляет XP, коины и помечает урок.
+
+    Возвращает (xp_выдано, коины_выдано).
+    """
     lp = db.get(LessonProgress, (user_id, lesson_id))
     if not lp or not lp.theory_done or lp.lesson_xp_claimed:
-        return 0
+        return (0, 0)
     if not recompute_lesson_practice_done(db, user_id, lesson_id, max_wrong=max_wrong):
-        return 0
+        return (0, 0)
     lp.lesson_xp_claimed = True
     lp.updated_at = _now_iso()
     add_score(db, user_id, xp_amount)
-    return xp_amount
+    coins_granted = 0
+    if coin_amount > 0:
+        wallet = db.get(Wallet, user_id)
+        if wallet:
+            wallet.balance += coin_amount
+            coins_granted = coin_amount
+            db.add(
+                CurrencyTransaction(
+                    user_id=user_id,
+                    delta=coin_amount,
+                    reason="lesson_complete",
+                    ref_type="lesson",
+                    ref_id=lesson_id,
+                    created_at=_now_iso(),
+                )
+            )
+    return (xp_amount, coins_granted)
 
 
 def add_score(db: Session, user_id: int, points: int) -> None:
@@ -177,6 +207,8 @@ def wrong_attempts_for_lesson(db: Session, user_id: int, lesson_id: int) -> int:
             TaskAttempt.user_id == user_id,
             TaskTemplate.lesson_id == lesson_id,
             TaskAttempt.is_correct.is_(False),
+            TaskInstance.assignment_id.is_(None),
+            TaskTemplate.counts_toward_lesson_practice.is_(True),
         )
         .scalar()
     )
@@ -188,9 +220,16 @@ def recompute_lesson_practice_done(
 ) -> bool:
     if wrong_attempts_for_lesson(db, user_id, lesson_id) > max_wrong:
         return False
-    templates = db.query(TaskTemplate).filter(TaskTemplate.lesson_id == lesson_id).all()
+    templates = (
+        db.query(TaskTemplate)
+        .filter(
+            TaskTemplate.lesson_id == lesson_id,
+            TaskTemplate.counts_toward_lesson_practice.is_(True),
+        )
+        .all()
+    )
     if not templates:
-        return False
+        return True
     for t in templates:
         exists = (
             db.query(TaskAttempt)

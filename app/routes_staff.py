@@ -19,6 +19,7 @@ from app.models import (
     LessonTheoryBlock,
     TaskAttempt,
     TaskTemplate,
+    TeacherAssignmentRewardClaim,
     User,
 )
 from app.schemas import (
@@ -253,60 +254,11 @@ class AssignmentOut(BaseModel):
     task_title: str | None
     note: str | None
     created_at: str
+    reward_coins: int
+    reward_xp: int
 
 
-@teacher_router.post("/classes/{class_id}/assignments", response_model=AssignmentOut)
-def assign_task_to_class(
-    class_id: int,
-    body: TeacherAssignTaskBody,
-    db: Annotated[Session, Depends(get_db)],
-    user: Annotated[User, Depends(require_roles("teacher", "admin"))],
-) -> AssignmentOut:
-    c = db.get(CourseClass, class_id)
-    if not c or c.teacher_id != user.id:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Class not found")
-    tmpl = db.get(TaskTemplate, body.task_template_id)
-    if not tmpl:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Task template not found")
-    lesson = db.get(Lesson, tmpl.lesson_id)
-    if not lesson:
-        raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail="Broken lesson")
-    if not lesson.is_published:
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail="Назначать можно только задания из опубликованных уроков платформы",
-        )
-    row = ClassTaskAssignment(
-        class_id=class_id,
-        task_template_id=tmpl.id,
-        teacher_id=user.id,
-        note=body.note,
-        created_at=_now_iso(),
-    )
-    db.add(row)
-    db.commit()
-    db.refresh(row)
-    return AssignmentOut(
-        id=row.id,
-        class_id=row.class_id,
-        task_template_id=row.task_template_id,
-        lesson_id=lesson.id,
-        lesson_title=lesson.title,
-        task_title=tmpl.title,
-        note=row.note,
-        created_at=row.created_at,
-    )
-
-
-@teacher_router.get("/classes/{class_id}/assignments", response_model=list[AssignmentOut])
-def list_class_assignments(
-    class_id: int,
-    db: Annotated[Session, Depends(get_db)],
-    user: Annotated[User, Depends(require_roles("teacher", "admin"))],
-) -> list[AssignmentOut]:
-    c = db.get(CourseClass, class_id)
-    if not c or c.teacher_id != user.id:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Class not found")
+def _assignments_out_for_class(db: Session, class_id: int) -> list[AssignmentOut]:
     rows = (
         db.query(ClassTaskAssignment)
         .filter(ClassTaskAssignment.class_id == class_id)
@@ -329,12 +281,146 @@ def list_class_assignments(
                 task_title=tmpl.title,
                 note=row.note,
                 created_at=row.created_at,
+                reward_coins=row.reward_coins,
+                reward_xp=row.reward_xp,
             )
         )
     return out
 
 
+@teacher_router.post("/classes/{class_id}/assignments", response_model=AssignmentOut)
+def assign_task_to_class(
+    class_id: int,
+    body: TeacherAssignTaskBody,
+    db: Annotated[Session, Depends(get_db)],
+    user: Annotated[User, Depends(require_roles("teacher", "admin"))],
+) -> AssignmentOut:
+    c = db.get(CourseClass, class_id)
+    if not c or c.teacher_id != user.id:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Class not found")
+    tmpl = db.get(TaskTemplate, body.task_template_id)
+    if not tmpl:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Task template not found")
+    if not tmpl.assignable_by_teacher:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Это задание недоступно для назначения классу — на платформе для учителей доступны только опубликованные шаблоны из каталога.",
+        )
+    lesson = db.get(Lesson, tmpl.lesson_id)
+    if not lesson:
+        raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail="Broken lesson")
+    if not lesson.is_published:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Назначать можно только задания из опубликованных уроков платформы",
+        )
+    row = ClassTaskAssignment(
+        class_id=class_id,
+        task_template_id=tmpl.id,
+        teacher_id=user.id,
+        note=body.note,
+        created_at=_now_iso(),
+        reward_coins=body.reward_coins,
+        reward_xp=body.reward_xp,
+    )
+    db.add(row)
+    db.commit()
+    db.refresh(row)
+    return AssignmentOut(
+        id=row.id,
+        class_id=row.class_id,
+        task_template_id=row.task_template_id,
+        lesson_id=lesson.id,
+        lesson_title=lesson.title,
+        task_title=tmpl.title,
+        note=row.note,
+        created_at=row.created_at,
+        reward_coins=row.reward_coins,
+        reward_xp=row.reward_xp,
+    )
+
+
+@teacher_router.get("/classes/{class_id}/assignments", response_model=list[AssignmentOut])
+def list_class_assignments(
+    class_id: int,
+    db: Annotated[Session, Depends(get_db)],
+    user: Annotated[User, Depends(require_roles("teacher", "admin"))],
+) -> list[AssignmentOut]:
+    c = db.get(CourseClass, class_id)
+    if not c or c.teacher_id != user.id:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Class not found")
+    return _assignments_out_for_class(db, class_id)
+
+
+@teacher_router.delete(
+    "/classes/{class_id}/assignments/{assignment_id}",
+    status_code=status.HTTP_204_NO_CONTENT,
+)
+def delete_class_assignment(
+    class_id: int,
+    assignment_id: int,
+    db: Annotated[Session, Depends(get_db)],
+    user: Annotated[User, Depends(require_roles("teacher", "admin"))],
+) -> None:
+    c = db.get(CourseClass, class_id)
+    if not c:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Class not found")
+    if user.role != "admin" and c.teacher_id != user.id:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Class not found")
+    row = db.get(ClassTaskAssignment, assignment_id)
+    if not row or row.class_id != class_id:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Assignment not found")
+    db.query(TeacherAssignmentRewardClaim).filter(
+        TeacherAssignmentRewardClaim.assignment_id == assignment_id
+    ).delete()
+    db.delete(row)
+    db.commit()
+
+
 # --- admin ---
+
+
+class AdminClassOut(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
+    id: int
+    name: str
+    teacher_id: int
+    teacher_login: str
+    teacher_display_name: str
+
+
+@admin_router.get("/classes", response_model=list[AdminClassOut])
+def admin_list_all_classes(
+    db: Annotated[Session, Depends(get_db)],
+    _: Annotated[User, Depends(require_roles("admin"))],
+) -> list[AdminClassOut]:
+    rows = db.query(CourseClass).order_by(CourseClass.id).all()
+    out: list[AdminClassOut] = []
+    for c in rows:
+        t = db.get(User, c.teacher_id)
+        out.append(
+            AdminClassOut(
+                id=c.id,
+                name=c.name,
+                teacher_id=c.teacher_id,
+                teacher_login=t.login if t else "",
+                teacher_display_name=(t.display_name or t.login) if t else "",
+            )
+        )
+    return out
+
+
+@admin_router.get("/classes/{class_id}/assignments", response_model=list[AssignmentOut])
+def admin_list_class_assignments(
+    class_id: int,
+    db: Annotated[Session, Depends(get_db)],
+    _: Annotated[User, Depends(require_roles("admin"))],
+) -> list[AssignmentOut]:
+    c = db.get(CourseClass, class_id)
+    if not c:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Class not found")
+    return _assignments_out_for_class(db, class_id)
 
 
 class LessonOut(BaseModel):

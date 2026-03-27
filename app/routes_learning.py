@@ -1,10 +1,11 @@
 from __future__ import annotations
 
 import json
+import random
 from datetime import datetime, timedelta, timezone
 from typing import Annotated
 
-from fastapi import APIRouter, Depends, HTTPException, Request, status
+from fastapi import APIRouter, Depends, HTTPException, Query, Request, status
 from pydantic import BaseModel, ConfigDict, Field
 from sqlalchemy import func
 from sqlalchemy.orm import Session
@@ -24,6 +25,7 @@ from app.models import (
     TaskAttempt,
     TaskInstance,
     TaskTemplate,
+    TeacherAssignmentRewardClaim,
     User,
     UserStat,
     Wallet,
@@ -34,6 +36,7 @@ from app.services import (
     add_score,
     answers_match,
     compute_expected,
+    ensure_user_economy_rows,
     grant_lesson_completion_xp_if_eligible,
     parse_checker_config,
     parse_param_spec,
@@ -90,9 +93,15 @@ def list_lessons(
     db: Annotated[Session, Depends(get_db)],
     user: Annotated[User, Depends(get_current_user)],
 ) -> list[Lesson]:
-    # Учитель назначает только то, что видно на платформе (опубликованные уроки).
     q = db.query(Lesson).filter(Lesson.is_published.is_(True)).order_by(Lesson.sort_order)
-    if user.role in ("child", "teacher", "admin"):
+    if user.role == "teacher":
+        q = (
+            q.join(TaskTemplate, TaskTemplate.lesson_id == Lesson.id)
+            .filter(TaskTemplate.assignable_by_teacher.is_(True))
+            .distinct()
+        )
+        return q.all()
+    if user.role in ("child", "admin"):
         return q.all()
     return []
 
@@ -118,12 +127,10 @@ def get_lesson(
         .order_by(LessonTheoryBlock.sort_order)
         .all()
     )
-    tasks = (
-        db.query(TaskTemplate)
-        .filter(TaskTemplate.lesson_id == lesson_id)
-        .order_by(TaskTemplate.sort_order)
-        .all()
-    )
+    task_q = db.query(TaskTemplate).filter(TaskTemplate.lesson_id == lesson_id)
+    if user.role == "teacher":
+        task_q = task_q.filter(TaskTemplate.assignable_by_teacher.is_(True))
+    tasks = task_q.order_by(TaskTemplate.sort_order).all()
     return LessonDetail(
         id=lesson.id,
         title=lesson.title,
@@ -263,6 +270,9 @@ class MyAssignmentRow(BaseModel):
     task_title: str | None
     note: str | None
     assigned_at: str
+    reward_coins: int
+    reward_xp: int
+    bonus_claimed: bool = Field(description="Бонус учителя за это назначение уже получен")
 
 
 @learning_router.get("/classes/invite-preview", response_model=InvitePreviewOut)
@@ -368,6 +378,18 @@ def my_teacher_assignments(
         .order_by(ClassTaskAssignment.id.desc())
         .all()
     )
+    aid_list = [a.id for a in assigns]
+    claimed_ids: set[int] = set()
+    if aid_list:
+        claimed_ids = {
+            row.assignment_id
+            for row in db.query(TeacherAssignmentRewardClaim)
+            .filter(
+                TeacherAssignmentRewardClaim.user_id == user.id,
+                TeacherAssignmentRewardClaim.assignment_id.in_(aid_list),
+            )
+            .all()
+        }
     out: list[MyAssignmentRow] = []
     for a in assigns:
         c = db.get(CourseClass, a.class_id)
@@ -386,17 +408,29 @@ def my_teacher_assignments(
                 task_title=tmpl.title,
                 note=a.note,
                 assigned_at=a.created_at,
+                reward_coins=a.reward_coins,
+                reward_xp=a.reward_xp,
+                bonus_claimed=a.id in claimed_ids,
             )
         )
     return out
 
 
-@learning_router.post("/lessons/{lesson_id}/theory-complete", status_code=204)
+class TheoryCompleteOut(BaseModel):
+    xp_awarded: int = Field(
+        description="Начислено XP за завершение урока (теория+практика, один раз)",
+    )
+    coins_awarded: int = Field(
+        description="Начислено коинов за завершение урока (аналогично)",
+    )
+
+
+@learning_router.post("/lessons/{lesson_id}/theory-complete", response_model=TheoryCompleteOut)
 def mark_theory_complete(
     lesson_id: int,
     db: Annotated[Session, Depends(get_db)],
     user: Annotated[User, Depends(get_current_user)],
-) -> None:
+) -> TheoryCompleteOut:
     if user.role != "child":
         raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Only students")
     lesson = db.get(Lesson, lesson_id)
@@ -418,24 +452,41 @@ def mark_theory_complete(
         lp.theory_done = True
         lp.updated_at = ts
     db.flush()
-    grant_lesson_completion_xp_if_eligible(
+    xp_granted, coins_granted = grant_lesson_completion_xp_if_eligible(
         db,
         user.id,
         lesson_id,
         settings.lesson_completion_xp,
+        coin_amount=settings.lesson_completion_coins,
         max_wrong=settings.practice_max_wrong_per_lesson,
     )
     db.commit()
-    return None
+    return TheoryCompleteOut(xp_awarded=xp_granted, coins_awarded=coins_granted)
 
 
 # --- practice ---
+
+ASSIGNMENT_REPEAT_NOTICE = (
+    "Вы уже проходили это задание. При повторном прохождении Монеты и XP начисляться не будут."
+)
+
+
+class PracticeChoiceOut(BaseModel):
+    choice_id: str
+    text: str
 
 
 class StartPracticeResponse(BaseModel):
     instance_id: int
     prompt: str
     created_at: str
+    repeat_without_rewards: bool = False
+    notice: str | None = None
+    ui_mode: str | None = Field(
+        default=None,
+        description="asgard_mc — варианты ответа как в уроке Асгард; иначе ввод текста",
+    )
+    choices: list[PracticeChoiceOut] | None = None
 
 
 class SubmitPracticeResponse(BaseModel):
@@ -447,6 +498,7 @@ class SubmitPracticeResponse(BaseModel):
     xp_awarded: int = Field(
         description="Изменение XP: награда за задачу, штраф за ошибку (отрицательное) или бонус за урок",
     )
+    notice: str | None = None
 
 
 def _now_iso() -> str:
@@ -480,6 +532,7 @@ def start_practice(
     template_id: int,
     db: Annotated[Session, Depends(get_db)],
     user: Annotated[User, Depends(get_current_user)],
+    assignment_id: Annotated[int | None, Query(description="ID назначения от учителя (/me/assignments)")] = None,
 ) -> StartPracticeResponse:
     if user.role != "child":
         raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Only students")
@@ -488,15 +541,82 @@ def start_practice(
     if not tmpl:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Template not found")
 
+    if tmpl.assignable_by_teacher and assignment_id is None:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail=(
+                "Это задание с платформы доступно только по назначению учителя. "
+                "Откройте его в разделе «Задания от учителя»."
+            ),
+        )
+
+    link_assignment_id: int | None = None
+    if assignment_id is not None:
+        asn = db.get(ClassTaskAssignment, assignment_id)
+        if not asn:
+            raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Assignment not found")
+        if asn.task_template_id != template_id:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="Назначение не относится к этому шаблону задачи",
+            )
+        if db.get(ClassMember, (asn.class_id, user.id)) is None:
+            raise HTTPException(
+                status_code=status.HTTP_403_FORBIDDEN,
+                detail="Вы не состоите в классе этого назначения",
+            )
+        link_assignment_id = asn.id
+
     spec = parse_param_spec(tmpl.param_spec_json)
     params = sample_params(spec)
     checker_cfg = parse_checker_config(tmpl.checker_config_json)
     expected = compute_expected(params, tmpl.checker_type, checker_cfg)
     prompt = render_prompt(tmpl.prompt_template, params)
 
+    choices_response: list[PracticeChoiceOut] | None = None
+    ui_mode: str | None = None
+    if checker_cfg.get("kind") == "choice":
+        raw_choices = checker_cfg.get("choices")
+        if not isinstance(raw_choices, list) or len(raw_choices) < 2:
+            raise HTTPException(
+                status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+                detail="Некорректная конфигурация задания",
+            )
+        built: list[PracticeChoiceOut] = []
+        seen_ids: list[str] = []
+        for c in raw_choices:
+            if not isinstance(c, dict):
+                continue
+            cid = str(c.get("id", "")).strip()
+            txt = str(c.get("text", "")).strip()
+            if not cid or not txt:
+                continue
+            built.append(PracticeChoiceOut(choice_id=cid, text=txt))
+            seen_ids.append(cid)
+        exp_c = str(checker_cfg.get("expected_choice_id", "")).strip()
+        if exp_c not in seen_ids or len(built) < 2:
+            raise HTTPException(
+                status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+                detail="Некорректная конфигурация задания",
+            )
+        random.shuffle(built)
+        choices_response = built
+        ui_mode = "asgard_mc"
+
+    repeat_without = False
+    start_notice: str | None = None
+    if link_assignment_id is not None:
+        if (
+            db.get(TeacherAssignmentRewardClaim, (user.id, link_assignment_id))
+            is not None
+        ):
+            repeat_without = True
+            start_notice = ASSIGNMENT_REPEAT_NOTICE
+
     inst = TaskInstance(
         user_id=user.id,
         task_template_id=tmpl.id,
+        assignment_id=link_assignment_id,
         params_json=json.dumps(params, ensure_ascii=False),
         expected_answer=expected,
         created_at=_now_iso(),
@@ -504,7 +624,15 @@ def start_practice(
     db.add(inst)
     db.commit()
     db.refresh(inst)
-    return StartPracticeResponse(instance_id=inst.id, prompt=prompt, created_at=inst.created_at)
+    return StartPracticeResponse(
+        instance_id=inst.id,
+        prompt=prompt,
+        created_at=inst.created_at,
+        repeat_without_rewards=repeat_without,
+        notice=start_notice,
+        ui_mode=ui_mode,
+        choices=choices_response,
+    )
 
 
 @learning_router.post("/practice/submit/{instance_id}", response_model=SubmitPracticeResponse)
@@ -517,6 +645,8 @@ def submit_practice(
     if user.role != "child":
         raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Only students")
 
+    ensure_user_economy_rows(db, user.id)
+
     inst = db.get(TaskInstance, instance_id)
     if not inst or inst.user_id != user.id:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Instance not found")
@@ -527,7 +657,10 @@ def submit_practice(
 
     cfg = parse_checker_config(tmpl.checker_config_json)
     tolerance = float(cfg.get("tolerance", 0))
-    correct = answers_match(inst.expected_answer, body.answer, tolerance)
+    if cfg.get("kind") == "choice":
+        correct = inst.expected_answer.strip() == body.answer.strip()
+    else:
+        correct = answers_match(inst.expected_answer, body.answer, tolerance)
 
     if not correct and wrong_attempts_for_lesson(db, user.id, tmpl.lesson_id) >= settings.practice_max_wrong_per_lesson:
         raise HTTPException(
@@ -547,15 +680,31 @@ def submit_practice(
     coins_awarded = 0
     xp_from_task = 0
     currency_on_attempt = 0
+    submit_notice: str | None = None
+    pending_teacher_claim: int | None = None
     if correct:
-        prior_today = _count_correct_attempts_today_utc(db, user.id)
-        coins_awarded = (
-            settings.daily_first_correct_coins + settings.daily_each_next_extra_coins * prior_today
-        )
-        xp_from_task = 10
-        if duration_ms <= settings.speed_bonus_ms:
-            coins_awarded += settings.speed_bonus_amount
-            xp_from_task += 5
+        if inst.assignment_id is not None:
+            claim = db.get(
+                TeacherAssignmentRewardClaim, (user.id, inst.assignment_id)
+            )
+            asn = db.get(ClassTaskAssignment, inst.assignment_id)
+            rc = int(asn.reward_coins or 0) if asn else 0
+            rx = int(asn.reward_xp or 0) if asn else 0
+            if claim is not None:
+                submit_notice = ASSIGNMENT_REPEAT_NOTICE
+            elif asn and (rc > 0 or rx > 0):
+                coins_awarded = rc
+                xp_from_task = rx
+                pending_teacher_claim = inst.assignment_id
+        else:
+            prior_today = _count_correct_attempts_today_utc(db, user.id)
+            coins_awarded = (
+                settings.daily_first_correct_coins + settings.daily_each_next_extra_coins * prior_today
+            )
+            xp_from_task = 10
+            if duration_ms <= settings.speed_bonus_ms:
+                coins_awarded += settings.speed_bonus_amount
+                xp_from_task += 5
         currency_on_attempt = coins_awarded
 
     attempt = TaskAttempt(
@@ -573,38 +722,98 @@ def submit_practice(
 
     if correct:
         wallet = db.get(Wallet, user.id)
-        if wallet:
+        if wallet and coins_awarded:
+            tx_reason = (
+                "teacher_assignment" if inst.assignment_id is not None else "task_correct"
+            )
             wallet.balance += coins_awarded
             db.add(
                 CurrencyTransaction(
                     user_id=user.id,
                     delta=coins_awarded,
-                    reason="task_correct",
+                    reason=tx_reason,
                     ref_type="task_attempt",
                     ref_id=attempt.id,
                     created_at=_now_iso(),
                 )
             )
-        add_score(db, user.id, xp_from_task)
+        if xp_from_task:
+            add_score(db, user.id, xp_from_task)
 
-        lp_gain = db.get(LessonProgress, (user.id, tmpl.lesson_id))
-        if not lp_gain:
-            lp_gain = LessonProgress(
-                user_id=user.id,
-                lesson_id=tmpl.lesson_id,
-                theory_done=False,
-                practice_done=False,
-                updated_at=_now_iso(),
+        if inst.assignment_id is None:
+            lp_gain = db.get(LessonProgress, (user.id, tmpl.lesson_id))
+            if not lp_gain:
+                lp_gain = LessonProgress(
+                    user_id=user.id,
+                    lesson_id=tmpl.lesson_id,
+                    theory_done=False,
+                    practice_done=False,
+                    updated_at=_now_iso(),
+                )
+                db.add(lp_gain)
+                db.flush()
+            lp_gain.practice_pool_coins += coins_awarded
+            lp_gain.practice_pool_xp += xp_from_task
+            lp_gain.updated_at = _now_iso()
+
+        if pending_teacher_claim is not None:
+            db.add(
+                TeacherAssignmentRewardClaim(
+                    user_id=user.id,
+                    assignment_id=pending_teacher_claim,
+                    claimed_at=_now_iso(),
+                )
             )
-            db.add(lp_gain)
-            db.flush()
-        lp_gain.practice_pool_coins += coins_awarded
-        lp_gain.practice_pool_xp += xp_from_task
-        lp_gain.updated_at = _now_iso()
 
-    elif not correct and (settings.practice_wrong_coin_penalty > 0 or settings.practice_wrong_xp_penalty > 0):
+    elif not correct:
         lp_pen = db.get(LessonProgress, (user.id, tmpl.lesson_id))
-        if lp_pen:
+        used_assignment_penalty = False
+        if inst.assignment_id is not None:
+            asn = db.get(ClassTaskAssignment, inst.assignment_id)
+            pen_c = int(asn.reward_coins or 0) if asn else 0
+            pen_x = int(asn.reward_xp or 0) if asn else 0
+            if pen_c > 0 or pen_x > 0:
+                used_assignment_penalty = True
+                coins_taken = 0
+                if pen_c > 0:
+                    wallet = db.get(Wallet, user.id)
+                    if wallet:
+                        coins_taken = min(pen_c, wallet.balance)
+                        if coins_taken:
+                            wallet.balance -= coins_taken
+                            db.add(
+                                CurrencyTransaction(
+                                    user_id=user.id,
+                                    delta=-coins_taken,
+                                    reason="teacher_assignment_wrong",
+                                    ref_type="task_attempt",
+                                    ref_id=attempt.id,
+                                    created_at=_now_iso(),
+                                )
+                            )
+                coins_awarded = -coins_taken
+                currency_on_attempt = -coins_taken
+                attempt.currency_awarded = currency_on_attempt
+
+                if pen_x > 0:
+                    st0 = db.get(UserStat, user.id)
+                    tot0 = st0.score_total if st0 else 0
+                    take_xp = min(pen_x, tot0)
+                    if take_xp > 0:
+                        add_score(db, user.id, -take_xp)
+                        xp_from_task = -take_xp
+
+                if lp_pen:
+                    lp_pen.updated_at = _now_iso()
+
+        if (
+            not used_assignment_penalty
+            and lp_pen
+            and (
+                settings.practice_wrong_coin_penalty > 0
+                or settings.practice_wrong_xp_penalty > 0
+            )
+        ):
             coins_taken = 0
             if settings.practice_wrong_coin_penalty > 0 and lp_pen.practice_pool_coins > 0:
                 intended = min(settings.practice_wrong_coin_penalty, lp_pen.practice_pool_coins)
@@ -650,20 +859,27 @@ def submit_practice(
         lp.updated_at = _now_iso()
 
     db.flush()
-    xp_from_lesson = grant_lesson_completion_xp_if_eligible(
+    xp_from_lesson, coins_from_lesson = grant_lesson_completion_xp_if_eligible(
         db,
         user.id,
         tmpl.lesson_id,
         settings.lesson_completion_xp,
+        coin_amount=settings.lesson_completion_coins,
         max_wrong=settings.practice_max_wrong_per_lesson,
     )
     xp_awarded = xp_from_task + xp_from_lesson
+    coins_awarded_total = coins_awarded + coins_from_lesson
 
     db.commit()
 
+    show_expected: str | None = None
+    if not correct and cfg.get("kind") != "choice":
+        show_expected = inst.expected_answer
+
     return SubmitPracticeResponse(
         correct=correct,
-        expected_answer=inst.expected_answer if not correct else None,
-        coins_awarded=coins_awarded,
+        expected_answer=show_expected,
+        coins_awarded=coins_awarded_total,
         xp_awarded=xp_awarded,
+        notice=submit_notice,
     )

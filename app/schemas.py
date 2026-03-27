@@ -72,6 +72,8 @@ class JoinClassBody(BaseModel):
 class TeacherAssignTaskBody(BaseModel):
     task_template_id: int
     note: str | None = Field(default=None, max_length=2000)
+    reward_coins: int = Field(default=0, ge=0, le=100, description="Бонус монет за верное решение (один раз)")
+    reward_xp: int = Field(default=0, ge=0, le=1000, description="Бонус XP за верное решение (один раз)")
 
 
 class AdminUserBody(BaseModel):

@@ -82,6 +82,25 @@ class ClassTaskAssignment(Base):
     teacher_id: Mapped[int] = mapped_column(ForeignKey("users.id", ondelete="CASCADE"), nullable=False)
     note: Mapped[str | None] = mapped_column(Text, nullable=True)
     created_at: Mapped[str] = mapped_column(String(32), nullable=False)
+    reward_coins: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
+    reward_xp: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
+
+    __table_args__ = (
+        CheckConstraint("reward_coins >= 0 AND reward_coins <= 100", name="ck_assignment_reward_coins"),
+        CheckConstraint("reward_xp >= 0 AND reward_xp <= 1000", name="ck_assignment_reward_xp"),
+    )
+
+
+class TeacherAssignmentRewardClaim(Base):
+    """Один раз выдать бонус учителя за назначение (ученик + задание)."""
+
+    __tablename__ = "teacher_assignment_reward_claims"
+
+    user_id: Mapped[int] = mapped_column(ForeignKey("users.id", ondelete="CASCADE"), primary_key=True)
+    assignment_id: Mapped[int] = mapped_column(
+        ForeignKey("class_task_assignments.id", ondelete="CASCADE"), primary_key=True
+    )
+    claimed_at: Mapped[str] = mapped_column(String(32), nullable=False)
 
 
 class Lesson(Base):
@@ -123,6 +142,12 @@ class TaskTemplate(Base):
     param_spec_json: Mapped[str] = mapped_column(Text, nullable=False)
     checker_type: Mapped[str] = mapped_column(String(32), nullable=False, default="numeric")
     checker_config_json: Mapped[str | None] = mapped_column(Text, nullable=True)
+    assignable_by_teacher: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)
+    counts_toward_lesson_practice: Mapped[bool] = mapped_column(
+        Boolean,
+        nullable=False,
+        default=True,
+    )
 
     lesson: Mapped[Lesson] = relationship(back_populates="task_templates")
 
@@ -138,6 +163,10 @@ class TaskInstance(Base):
     user_id: Mapped[int] = mapped_column(ForeignKey("users.id", ondelete="CASCADE"), nullable=False)
     task_template_id: Mapped[int] = mapped_column(
         ForeignKey("task_templates.id", ondelete="CASCADE"), nullable=False
+    )
+    assignment_id: Mapped[int | None] = mapped_column(
+        ForeignKey("class_task_assignments.id", ondelete="SET NULL"),
+        nullable=True,
     )
     params_json: Mapped[str] = mapped_column(Text, nullable=False)
     expected_answer: Mapped[str] = mapped_column(String(256), nullable=False)
