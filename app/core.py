@@ -21,7 +21,10 @@ class Settings:
         self.access_token_expire_minutes = int(os.getenv("ACCESS_TOKEN_EXPIRE_MINUTES", "60"))
         self.parent_token_expire_minutes = int(os.getenv("PARENT_TOKEN_EXPIRE_MINUTES", "15"))
         self.parent_challenge_ttl_minutes = int(os.getenv("PARENT_CHALLENGE_TTL_MINUTES", "5"))
-        self.base_currency_reward = int(os.getenv("BASE_CURRENCY_REWARD", "10"))
+        # Первая верная попытка за UTC-день: столько коинов; каждая следующая за тот же день: +extra.
+        self.daily_first_correct_coins = int(os.getenv("DAILY_FIRST_CORRECT_COINS", "50"))
+        self.daily_each_next_extra_coins = int(os.getenv("DAILY_EACH_NEXT_EXTRA_COINS", "10"))
+        self.lesson_completion_xp = int(os.getenv("LESSON_COMPLETION_XP", "100"))
         self.speed_bonus_ms = int(os.getenv("SPEED_BONUS_MS", "30000"))
         self.speed_bonus_amount = int(os.getenv("SPEED_BONUS_AMOUNT", "5"))
 

@@ -167,6 +167,7 @@ class LessonProgress(Base):
     lesson_id: Mapped[int] = mapped_column(ForeignKey("lessons.id", ondelete="CASCADE"), primary_key=True)
     theory_done: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)
     practice_done: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)
+    lesson_xp_claimed: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)
     updated_at: Mapped[str] = mapped_column(String(32), nullable=False)
 
 

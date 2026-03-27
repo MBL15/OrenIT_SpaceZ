@@ -4,12 +4,15 @@ from datetime import datetime, timezone
 from typing import Annotated, Literal
 
 from fastapi import APIRouter, Depends, HTTPException, status
-from pydantic import BaseModel, ConfigDict
+from pydantic import BaseModel, ConfigDict, Field
+from sqlalchemy import func
 from sqlalchemy.orm import Session
 
 from app.access import get_current_user
 from app.core import get_db
 from app.models import (
+    ClassMember,
+    CourseClass,
     CurrencyTransaction,
     MascotItem,
     User,
@@ -19,12 +22,15 @@ from app.models import (
     Wallet,
 )
 from app.schemas import BuyBody, EquipBody
+from app.services import level_from_total_xp
 
 play_router = APIRouter(tags=["play"])
 
 
 class WalletOut(BaseModel):
-    balance: int
+    model_config = ConfigDict(from_attributes=True)
+
+    coins: int = Field(validation_alias="balance", description="Баланс коинов")
 
 
 class MascotItemOut(BaseModel):
@@ -33,7 +39,7 @@ class MascotItemOut(BaseModel):
     id: int
     slug: str
     name: str
-    price: int
+    price: int = Field(description="Цена в коинах")
     slot: str
 
 
@@ -49,7 +55,17 @@ class LeaderRow(BaseModel):
     user_id: int
     display_name: str
     avatar_id: str | None
-    score: int
+    xp: int = Field(description="Очки опыта")
+    level: int = Field(description="Уровень (от суммарного XP)")
+
+
+class CoinsLeaderRow(BaseModel):
+    rank: int
+    user_id: int
+    display_name: str
+    avatar_id: str | None
+    coins_earned_total: int = Field(description="Всего заработано коинов за всё время")
+    level: int = Field(description="Уровень (от суммарного XP)")
 
 
 class PublicProfile(BaseModel):
@@ -58,12 +74,42 @@ class PublicProfile(BaseModel):
     id: int
     display_name: str
     avatar_id: str | None
-    score_total: int
-    score_week: int
+    xp_total: int = Field(description="Всего очков опыта")
+    xp_week: int = Field(description="Очки опыта за неделю")
+    level: int = Field(description="Уровень (от суммарного XP)")
 
 
 def _now_iso() -> str:
     return datetime.now(timezone.utc).replace(microsecond=0).isoformat()
+
+
+def _coins_earned_subquery(db: Session):
+    """Сумма положительных delta по транзакциям = заработанные коины (без возвратов/списаний)."""
+    return (
+        db.query(
+            CurrencyTransaction.user_id.label("uid"),
+            func.coalesce(func.sum(CurrencyTransaction.delta), 0).label("earned"),
+        )
+        .filter(CurrencyTransaction.delta > 0)
+        .group_by(CurrencyTransaction.user_id)
+        .subquery()
+    )
+
+
+def _assert_class_coins_leaderboard_access(db: Session, user: User, class_id: int) -> CourseClass:
+    c = db.get(CourseClass, class_id)
+    if not c:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Класс не найден")
+    if user.role == "admin":
+        return c
+    if user.role == "teacher" and c.teacher_id == user.id:
+        return c
+    if user.role == "child" and db.get(ClassMember, (class_id, user.id)) is not None:
+        return c
+    raise HTTPException(
+        status_code=status.HTTP_403_FORBIDDEN,
+        detail="Нет доступа к лидерборду этого класса",
+    )
 
 
 @play_router.get("/shop/items", response_model=list[MascotItemOut])
@@ -100,7 +146,7 @@ def buy_item(
         raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail="Already owned")
     wallet = db.get(Wallet, user.id)
     if not wallet or wallet.balance < item.price:
-        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Not enough currency")
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Недостаточно коинов")
 
     wallet.balance -= item.price
     db.add(
@@ -223,7 +269,86 @@ def leaderboard(
                 user_id=u.id,
                 display_name=u.display_name,
                 avatar_id=u.avatar_id,
-                score=st.score_week if scope == "week" else st.score_total,
+                xp=st.score_week if scope == "week" else st.score_total,
+                level=level_from_total_xp(st.score_total),
+            )
+        )
+    return out
+
+
+@play_router.get("/leaderboard/coins", response_model=list[CoinsLeaderRow])
+def leaderboard_coins_global(
+    db: Annotated[Session, Depends(get_db)],
+    _: Annotated[User, Depends(get_current_user)],
+    limit: int = 50,
+) -> list[CoinsLeaderRow]:
+    """Все ученики: рейтинг по сумме заработанных коинов за всё время."""
+    if limit < 1 or limit > 200:
+        limit = 50
+    tx_sum = _coins_earned_subquery(db)
+    earned_col = func.coalesce(tx_sum.c.earned, 0)
+    rows = (
+        db.query(User, earned_col.label("coins_earned"))
+        .outerjoin(tx_sum, User.id == tx_sum.c.uid)
+        .filter(User.role == "child")
+        .order_by(earned_col.desc(), User.id.asc())
+        .limit(limit)
+        .all()
+    )
+    out: list[CoinsLeaderRow] = []
+    for i, (u, earned) in enumerate(rows, start=1):
+        st = db.get(UserStat, u.id)
+        xp_total = st.score_total if st else 0
+        out.append(
+            CoinsLeaderRow(
+                rank=i,
+                user_id=u.id,
+                display_name=u.display_name,
+                avatar_id=u.avatar_id,
+                coins_earned_total=int(earned or 0),
+                level=level_from_total_xp(xp_total),
+            )
+        )
+    return out
+
+
+@play_router.get(
+    "/leaderboard/coins/class/{class_id}",
+    response_model=list[CoinsLeaderRow],
+)
+def leaderboard_coins_for_class(
+    class_id: int,
+    db: Annotated[Session, Depends(get_db)],
+    user: Annotated[User, Depends(get_current_user)],
+    limit: int = 50,
+) -> list[CoinsLeaderRow]:
+    """Ученики одного класса: тот же критерий (заработанные коины за всё время)."""
+    _assert_class_coins_leaderboard_access(db, user, class_id)
+    if limit < 1 or limit > 200:
+        limit = 50
+    tx_sum = _coins_earned_subquery(db)
+    earned_col = func.coalesce(tx_sum.c.earned, 0)
+    rows = (
+        db.query(User, earned_col.label("coins_earned"))
+        .join(ClassMember, ClassMember.user_id == User.id)
+        .outerjoin(tx_sum, User.id == tx_sum.c.uid)
+        .filter(User.role == "child", ClassMember.class_id == class_id)
+        .order_by(earned_col.desc(), User.id.asc())
+        .limit(limit)
+        .all()
+    )
+    out: list[CoinsLeaderRow] = []
+    for i, (u, earned) in enumerate(rows, start=1):
+        st = db.get(UserStat, u.id)
+        xp_total = st.score_total if st else 0
+        out.append(
+            CoinsLeaderRow(
+                rank=i,
+                user_id=u.id,
+                display_name=u.display_name,
+                avatar_id=u.avatar_id,
+                coins_earned_total=int(earned or 0),
+                level=level_from_total_xp(xp_total),
             )
         )
     return out
@@ -239,10 +364,12 @@ def public_profile(
     if not u or u.role != "child":
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Not found")
     st = db.get(UserStat, user_id)
+    total = st.score_total if st else 0
     return PublicProfile(
         id=u.id,
         display_name=u.display_name,
         avatar_id=u.avatar_id,
-        score_total=st.score_total if st else 0,
-        score_week=st.score_week if st else 0,
+        xp_total=total,
+        xp_week=st.score_week if st else 0,
+        level=level_from_total_xp(total),
     )

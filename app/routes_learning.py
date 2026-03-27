@@ -1,11 +1,11 @@
 from __future__ import annotations
 
 import json
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 from typing import Annotated
 
 from fastapi import APIRouter, Depends, HTTPException, Request, status
-from pydantic import BaseModel, ConfigDict
+from pydantic import BaseModel, ConfigDict, Field
 from sqlalchemy import func
 from sqlalchemy.orm import Session
 
@@ -33,6 +33,7 @@ from app.services import (
     add_score,
     answers_match,
     compute_expected,
+    grant_lesson_completion_xp_if_eligible,
     parse_checker_config,
     parse_param_spec,
     published_lesson_ids,
@@ -408,6 +409,8 @@ def mark_theory_complete(
     else:
         lp.theory_done = True
         lp.updated_at = ts
+    db.flush()
+    grant_lesson_completion_xp_if_eligible(db, user.id, lesson_id, settings.lesson_completion_xp)
     db.commit()
     return None
 
@@ -424,12 +427,36 @@ class StartPracticeResponse(BaseModel):
 class SubmitPracticeResponse(BaseModel):
     correct: bool
     expected_answer: str | None = None
-    currency_awarded: int
-    score_awarded: int
+    coins_awarded: int = Field(description="Начислено коинов за верный ответ")
+    xp_awarded: int = Field(
+        description="Очки опыта с этой отправки (задача ± бонус урока, если урок только прошли)",
+    )
 
 
 def _now_iso() -> str:
     return datetime.now(timezone.utc).replace(microsecond=0).isoformat()
+
+
+def _utc_day_bounds_iso() -> tuple[str, str]:
+    now = datetime.now(timezone.utc).replace(microsecond=0)
+    start = now.replace(hour=0, minute=0, second=0)
+    end = start + timedelta(days=1)
+    return start.isoformat(), end.isoformat()
+
+
+def _count_correct_attempts_today_utc(db: Session, user_id: int) -> int:
+    start_iso, end_iso = _utc_day_bounds_iso()
+    n = (
+        db.query(func.count(TaskAttempt.id))
+        .filter(
+            TaskAttempt.user_id == user_id,
+            TaskAttempt.is_correct.is_(True),
+            TaskAttempt.submitted_at >= start_iso,
+            TaskAttempt.submitted_at < end_iso,
+        )
+        .scalar()
+    )
+    return int(n or 0)
 
 
 @learning_router.post("/practice/start/{template_id}", response_model=StartPracticeResponse)
@@ -492,14 +519,17 @@ def submit_practice(
         start = start.replace(tzinfo=timezone.utc)
     duration_ms = int((end - start).total_seconds() * 1000)
 
-    currency_awarded = 0
-    score_awarded = 0
+    coins_awarded = 0
+    xp_from_task = 0
     if correct:
-        currency_awarded = settings.base_currency_reward
-        score_awarded = 10
+        prior_today = _count_correct_attempts_today_utc(db, user.id)
+        coins_awarded = (
+            settings.daily_first_correct_coins + settings.daily_each_next_extra_coins * prior_today
+        )
+        xp_from_task = 10
         if duration_ms <= settings.speed_bonus_ms:
-            currency_awarded += settings.speed_bonus_amount
-            score_awarded += 5
+            coins_awarded += settings.speed_bonus_amount
+            xp_from_task += 5
 
     attempt = TaskAttempt(
         task_instance_id=inst.id,
@@ -509,7 +539,7 @@ def submit_practice(
         started_at=body.started_at,
         submitted_at=_now_iso(),
         duration_ms=duration_ms,
-        currency_awarded=currency_awarded,
+        currency_awarded=coins_awarded,
     )
     db.add(attempt)
     db.flush()
@@ -517,18 +547,18 @@ def submit_practice(
     if correct:
         wallet = db.get(Wallet, user.id)
         if wallet:
-            wallet.balance += currency_awarded
+            wallet.balance += coins_awarded
             db.add(
                 CurrencyTransaction(
                     user_id=user.id,
-                    delta=currency_awarded,
+                    delta=coins_awarded,
                     reason="task_correct",
                     ref_type="task_attempt",
                     ref_id=attempt.id,
                     created_at=_now_iso(),
                 )
             )
-        add_score(db, user.id, score_awarded)
+        add_score(db, user.id, xp_from_task)
 
         lp = db.get(LessonProgress, (user.id, tmpl.lesson_id))
         if not lp:
@@ -547,11 +577,17 @@ def submit_practice(
                 lp2.practice_done = True
                 lp2.updated_at = _now_iso()
 
+    db.flush()
+    xp_from_lesson = grant_lesson_completion_xp_if_eligible(
+        db, user.id, tmpl.lesson_id, settings.lesson_completion_xp
+    )
+    xp_awarded = xp_from_task + xp_from_lesson
+
     db.commit()
 
     return SubmitPracticeResponse(
         correct=correct,
         expected_answer=inst.expected_answer if not correct else None,
-        currency_awarded=currency_awarded,
-        score_awarded=score_awarded,
+        coins_awarded=coins_awarded,
+        xp_awarded=xp_awarded,
     )

@@ -10,6 +10,7 @@ from sqlalchemy.orm import Session
 
 from app.models import (
     Lesson,
+    LessonProgress,
     TaskAttempt,
     TaskInstance,
     TaskTemplate,
@@ -101,6 +102,44 @@ def iso_week_id() -> str:
 
 def _now_iso() -> str:
     return datetime.now(timezone.utc).replace(microsecond=0).isoformat()
+
+
+# Пороги уровней: 1-й с 0 XP; 2-й с 100; далее шаг к следующему уровню +100 (+200, +300, …).
+_XP_PER_LEVEL_TIER = 100
+
+
+def min_xp_for_level(level: int) -> int:
+    """Минимум суммарного XP, чтобы находиться на уровне level (level 1 — с нуля)."""
+    if level <= 1:
+        return 0
+    return _XP_PER_LEVEL_TIER * (level - 1) * level // 2
+
+
+def level_from_total_xp(xp: int) -> int:
+    if xp < 0:
+        xp = 0
+    level = 1
+    while min_xp_for_level(level + 1) <= xp:
+        level += 1
+    return level
+
+
+def grant_lesson_completion_xp_if_eligible(
+    db: Session, user_id: int, lesson_id: int, xp_amount: int
+) -> int:
+    """Если теория и практика пройдены и бонус ещё не выдан — начисляет XP и помечает урок."""
+    lp = db.get(LessonProgress, (user_id, lesson_id))
+    if (
+        not lp
+        or not lp.theory_done
+        or not lp.practice_done
+        or lp.lesson_xp_claimed
+    ):
+        return 0
+    lp.lesson_xp_claimed = True
+    lp.updated_at = _now_iso()
+    add_score(db, user_id, xp_amount)
+    return xp_amount
 
 
 def add_score(db: Session, user_id: int, points: int) -> None:

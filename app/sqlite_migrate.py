@@ -19,6 +19,14 @@ def apply_sqlite_migrations(engine) -> None:
             conn.execute(text("ALTER TABLE class_invites ADD COLUMN invite_code VARCHAR(16)"))
             conn.commit()
 
+        rows = conn.execute(text("PRAGMA table_info(lesson_progress)")).fetchall()
+        lp_cols = {r[1] for r in rows}
+        if "lesson_xp_claimed" not in lp_cols:
+            conn.execute(
+                text("ALTER TABLE lesson_progress ADD COLUMN lesson_xp_claimed BOOLEAN NOT NULL DEFAULT 0")
+            )
+            conn.commit()
+
 
 def backfill_class_invite_codes(session: Session) -> None:
     """Заполняет invite_code для строк, где колонка NULL (после ALTER)."""
