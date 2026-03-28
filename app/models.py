@@ -232,7 +232,7 @@ class LessonProgress(Base):
     theory_done: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)
     practice_done: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)
     lesson_xp_claimed: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)
-    # Награда с практики этого урока (коины/XP с верных задач); штрафы за ошибки списываются только отсюда, не с «чужих» коинов/опыта.
+    # Награда с практики этого урока (коины/ОП с верных задач); штрафы за ошибки списываются только отсюда, не с «чужих» коинов/опыта.
     practice_pool_coins: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
     practice_pool_xp: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
     updated_at: Mapped[str] = mapped_column(String(32), nullable=False)

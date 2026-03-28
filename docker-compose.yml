@@ -1,0 +1,53 @@
+# SpacEdu: фронт (nginx + статика) + FastAPI + SQLite в volume.
+# Запуск:  docker compose up --build -d
+# Стоп:   docker compose down
+# Логи:   docker compose logs -f
+#
+# Сайт: http://localhost:8080  (порт меняйте переменной PORT в .env рядом с compose)
+#
+# Обязательно задайте JWT_SECRET в production (файл .env рядом с docker-compose.yml):
+#   JWT_SECRET=длинная-случайная-строка
+# См. также .env.example
+
+services:
+  api:
+    build:
+      context: .
+      dockerfile: Dockerfile.api
+      args:
+        PIP_INDEX_URL: ${PIP_INDEX_URL:-https://pypi.tuna.tsinghua.edu.cn/simple}
+    volumes:
+      - orenit_data:/app/data
+    environment:
+      DATABASE_URL: sqlite:///./data/app.db
+      JWT_SECRET: ${JWT_SECRET:-change-me-set-JWT_SECRET-in-.env}
+    expose:
+      - "8000"
+    healthcheck:
+      test:
+        [
+          "CMD",
+          "python",
+          "-c",
+          "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8000/health')",
+        ]
+      interval: 15s
+      timeout: 5s
+      retries: 5
+      start_period: 25s
+
+  web:
+    build:
+      context: .
+      dockerfile: Dockerfile.web
+      args:
+        # Пустое значение в .env раньше затирало дефолт и снова включало npmjs.org
+        NPM_REGISTRY: ${NPM_REGISTRY:-https://registry.npmmirror.com}
+    ports:
+      - "${PORT:-8080}:80"
+    depends_on:
+      api:
+        condition: service_healthy
+
+volumes:
+  orenit_data:

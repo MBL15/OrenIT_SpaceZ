@@ -102,7 +102,6 @@ def seed_if_empty(db: Session) -> None:
     items = [
         MascotItem(slug="skin-academy", name="Космическая академия", price=40, slot="skin"),
         MascotItem(slug="skin-knight", name="Тёмный рыцарь", price=80, slot="skin"),
-        MascotItem(slug="hat-party", name="Праздничная шляпа", price=15, slot="hat"),
     ]
     db.add_all(items)
     db.flush()
@@ -182,7 +181,8 @@ def seed_if_empty(db: Session) -> None:
                 checker_type="numeric",
                 checker_config_json='{"kind":"binary","op":"+","left":"a","right":"b"}',
                 assignable_by_teacher=True,
-                counts_toward_lesson_practice=True,
+                # Как у Асгарда: награда за урок на карте не блокируется отдельной практикой на платформе
+                counts_toward_lesson_practice=False,
             ),
             TaskTemplate(
                 lesson_id=l2.id,
@@ -193,7 +193,7 @@ def seed_if_empty(db: Session) -> None:
                 checker_type="numeric",
                 checker_config_json='{"kind":"binary","op":"-","left":"a","right":"b"}',
                 assignable_by_teacher=True,
-                counts_toward_lesson_practice=True,
+                counts_toward_lesson_practice=False,
             ),
         ]
     )
@@ -245,11 +245,10 @@ def _retire_mascot_items_by_slug(db: Session, slugs: tuple[str, ...]) -> None:
 
 def ensure_mascot_catalog(db: Session) -> None:
     """Синхронизирует каталог маскота с актуальным набором предметов."""
-    _retire_mascot_items_by_slug(db, ("skin-blue", "skin-gold"))
+    _retire_mascot_items_by_slug(db, ("skin-blue", "skin-gold", "hat-party"))
     rows = [
         ("skin-academy", "Космическая академия", 40, "skin"),
         ("skin-knight", "Тёмный рыцарь", 80, "skin"),
-        ("hat-party", "Праздничная шляпа", 15, "hat"),
     ]
     for slug, name, price, slot in rows:
         existing = db.query(MascotItem).filter(MascotItem.slug == slug).first()

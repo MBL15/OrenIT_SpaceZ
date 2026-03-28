@@ -534,7 +534,7 @@ export default function TeacherCabinetPage() {
                                 : ''}
                               <br />
                               Награда: {row.reward_coins ?? 0} мон.
-                              {row.reward_xp ? `, ${row.reward_xp} XP` : ''}
+                              {row.reward_xp ? `, ${row.reward_xp} ОП` : ''}
                             </span>
                           </button>
                           <div className="cp-teacher-hw-item-actions">
@@ -887,7 +887,7 @@ export default function TeacherCabinetPage() {
                       </span>
                     </label>
                     <label className="cp-teacher-label">
-                      Бонус XP (необязательно)
+                      Бонус ОП (необязательно)
                       <input
                         className="space-input"
                         type="number"

@@ -35,11 +35,11 @@ class UserPublic(BaseModel):
     avatar_id: str | None = None
     xp_total: int | None = Field(
         default=None,
-        description="Суммарный XP (только для ученика)",
+        description="Суммарный ОП (только для ученика)",
     )
     level: int | None = Field(
         default=None,
-        description="Уровень ученика: +1 каждые 1000 суммарного XP (начиная с 1 при 0 XP)",
+        description="Уровень ученика: +1 каждые 1000 суммарного ОП (начиная с 1 при 0 ОП)",
     )
 
 
@@ -89,7 +89,7 @@ class TeacherAssignTaskBody(BaseModel):
     task_template_id: int
     note: str | None = Field(default=None, max_length=2000)
     reward_coins: int = Field(default=0, ge=0, le=100, description="Бонус монет за верное решение (один раз)")
-    reward_xp: int = Field(default=0, ge=0, le=1000, description="Бонус XP за верное решение (один раз)")
+    reward_xp: int = Field(default=0, ge=0, le=1000, description="Бонус ОП за верное решение (один раз)")
 
 
 class TeacherAssignBatchBody(BaseModel):

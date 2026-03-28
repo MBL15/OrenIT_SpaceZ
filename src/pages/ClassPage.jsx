@@ -12,8 +12,6 @@ export default function ClassPage() {
   const { user } = useAuth()
   const [rows, setRows] = useState(null)
   const [xpRows, setXpRows] = useState(null)
-  /** Монеты одноклассников (для списка класса); глобальный топ — в `rows` */
-  const [coinsClassRows, setCoinsClassRows] = useState(null)
   const [lbErr, setLbErr] = useState('')
   const [xpLbErr, setXpLbErr] = useState('')
   const [activeClassId, setActiveClassId] = useState(null)
@@ -72,61 +70,32 @@ export default function ClassPage() {
     if (user?.role !== 'child' || !myClassesLoaded) return
 
     if (myClasses.length === 0) {
-      let cancelled = false
-      setRows(null)
+      setRows([])
       setXpRows([])
-      setCoinsClassRows([])
       setLbErr('')
       setXpLbErr('')
-      ;(async () => {
-        const coinsRes = await apiFetch('/leaderboard/coins?limit=100')
-        if (cancelled) return
-        if (!coinsRes.ok) {
-          const data = await coinsRes.json().catch(() => ({}))
-          setLbErr(parseErrorDetail(data))
-          setRows([])
-        } else {
-          const data = await coinsRes.json().catch(() => null)
-          if (!Array.isArray(data)) {
-            setLbErr('Некорректный ответ сервера')
-            setRows([])
-          } else {
-            const mapped = data.map((r) => ({
-              id: r.user_id,
-              name: r.display_name || `Ученик #${r.user_id}`,
-              points: r.coins_earned_total ?? 0,
-              rank: r.rank,
-            }))
-            setRows(mapped)
-          }
-        }
-      })()
-      return () => {
-        cancelled = true
-      }
+      return
     }
 
     if (activeClassId == null) return
     let cancelled = false
     setRows(null)
     setXpRows(null)
-    setCoinsClassRows(null)
     setLbErr('')
     setXpLbErr('')
     ;(async () => {
-      const [coinsGlobalRes, xpRes, coinsClassRes] = await Promise.all([
-        apiFetch('/leaderboard/coins?limit=100'),
+      const [xpRes, coinsClassRes] = await Promise.all([
         apiFetch(`/leaderboard/class/${activeClassId}`),
         apiFetch(`/leaderboard/coins/class/${activeClassId}?limit=200`),
       ])
       if (cancelled) return
 
-      if (!coinsGlobalRes.ok) {
-        const data = await coinsGlobalRes.json().catch(() => ({}))
+      if (!coinsClassRes.ok) {
+        const data = await coinsClassRes.json().catch(() => ({}))
         setLbErr(parseErrorDetail(data))
         setRows([])
       } else {
-        const data = await coinsGlobalRes.json().catch(() => null)
+        const data = await coinsClassRes.json().catch(() => null)
         if (!Array.isArray(data)) {
           setLbErr('Некорректный ответ сервера')
           setRows([])
@@ -138,22 +107,6 @@ export default function ClassPage() {
             rank: r.rank,
           }))
           setRows(mapped)
-        }
-      }
-
-      if (!coinsClassRes.ok) {
-        setCoinsClassRows([])
-      } else {
-        const data = await coinsClassRes.json().catch(() => null)
-        if (!Array.isArray(data)) {
-          setCoinsClassRows([])
-        } else {
-          setCoinsClassRows(
-            data.map((r) => ({
-              id: r.user_id,
-              points: r.coins_earned_total ?? 0,
-            })),
-          )
         }
       }
 
@@ -257,30 +210,8 @@ export default function ClassPage() {
     })
   }, [xpRows, meId, meName])
 
-  const coinsByClassmateId = useMemo(() => {
-    const m = new Map()
-    for (const r of coinsClassRows || []) {
-      m.set(r.id, r.points)
-    }
-    return m
-  }, [coinsClassRows])
-
   const leaderboard = useMemo(() => [...merged], [merged])
   const leaderboardXp = useMemo(() => [...mergedXp], [mergedXp])
-
-  const classList = useMemo(() => {
-    const sorted = [...mergedXp].sort((a, b) =>
-      a.name.localeCompare(b.name, 'ru'),
-    )
-    return sorted.map((row) => ({
-      id: row.id,
-      name: row.name,
-      level: row.level,
-      points: coinsByClassmateId.get(row.id) ?? 0,
-      xpTotal: row.points,
-      isMe: row.isMe,
-    }))
-  }, [mergedXp, coinsByClassmateId])
 
   const activeClassName =
     myClasses.find((c) => c.class_id === activeClassId)?.class_name ?? ''
@@ -327,10 +258,9 @@ export default function ClassPage() {
   const bootPending =
     user?.role === 'child' &&
     (!myClassesLoaded ||
-      rows === null ||
+      (myClasses.length === 0 && rows === null) ||
       (myClasses.length > 0 &&
-        activeClassId != null &&
-        (xpRows === null || coinsClassRows === null)))
+        (activeClassId == null || rows === null || xpRows === null)))
 
   if (bootPending) {
     return (
@@ -346,10 +276,10 @@ export default function ClassPage() {
 
   const lbSubtitle =
     myClasses.length === 0
-      ? 'Лидерборд по монетам — среди всех учеников платформы. Вступите в класс по коду учителя, чтобы видеть XP и список одноклассников.'
+      ? 'Рейтинги по монетам и опыту — среди одноклассников. Вступите в класс по коду учителя, чтобы они отобразились.'
       : activeClassName
-        ? `Класс «${activeClassName}»: монеты — общий рейтинг платформы; XP и список класса — среди одноклассников.`
-        : 'Монеты — по всей платформе; XP и список — по выбранному классу.'
+        ? `Класс «${activeClassName}»: таблицы лидеров по монетам и по ОП — среди учеников этого класса.`
+        : 'Таблицы лидеров — по выбранному классу.'
 
   return (
     <div className="cp-wrap">
@@ -364,7 +294,7 @@ export default function ClassPage() {
             {myClasses.length > 1 && activeClassId != null && (
               <div className="cp-class-picker">
                 <label>
-                  Класс (XP и список)
+                  Класс
                   <select
                     value={activeClassId}
                     onChange={(e) =>
@@ -383,7 +313,7 @@ export default function ClassPage() {
           </div>
           <div className="cp-meta">
             <span className="cp-badge">
-              Место по монетам (платформа):{' '}
+              Место по монетам{myClasses.length > 0 ? ' (класс)' : ''}:{' '}
               {merged.find((r) => r.isMe)?.rank ?? '—'}
             </span>
           </div>
@@ -507,11 +437,12 @@ export default function ClassPage() {
           <section className="cp-section" aria-labelledby="cp-lb-title">
               <div className="cp-section-head">
                 <h2 id="cp-lb-title" className="cp-section-title">
-                  Лидерборд по монетам
+                  Таблица лидеров по монетам
                 </h2>
                 <p className="cp-section-hint">
-                  Заработанные монеты за всё время среди всех учеников платформы
-                  (топ по сумме начислений).
+                  {myClasses.length === 0
+                    ? 'Заработанные монеты за всё время — рейтинг строится среди одноклассников после вступления в класс.'
+                    : 'Заработанные монеты за всё время среди учеников выбранного класса (топ по сумме начислений).'}
                 </p>
               </div>
               <div className="cp-section-body">
@@ -520,9 +451,14 @@ export default function ClassPage() {
                     {lbErr}
                   </p>
                 ) : null}
-                {!lbErr && leaderboard.length === 0 ? (
+                {!lbErr && leaderboard.length === 0 && myClasses.length > 0 ? (
                   <p className="cp-section-hint" style={{ padding: '12px 18px' }}>
                     Пока нет данных по заработанным монетам.
+                  </p>
+                ) : null}
+                {!lbErr && myClasses.length === 0 ? (
+                  <p className="cp-section-hint" style={{ padding: '12px 18px' }}>
+                    После вступления в класс здесь появится таблица лидеров по монетам.
                   </p>
                 ) : null}
                 {leaderboard.length > 0 ? (
@@ -562,7 +498,7 @@ export default function ClassPage() {
                         <div
                           className="cp-bar"
                           aria-hidden
-                          title="Доля от максимума монет среди учеников платформы (в топе)"
+                          title="Доля от максимума монет в классе (в топе)"
                         >
                           <div
                             className="cp-bar-fill"
@@ -582,11 +518,10 @@ export default function ClassPage() {
           <section className="cp-section" aria-labelledby="cp-lb-xp-title">
               <div className="cp-section-head">
                 <h2 id="cp-lb-xp-title" className="cp-section-title">
-                  Лидерборд по XP
+                  Таблица лидеров по ОП
                 </h2>
                 <p className="cp-section-hint">
-                  Суммарный опыт на платформе; при равном уровне выше тот, у кого больше
-                  XP.
+                  Суммарный опыт в классе; при равном уровне выше тот, у кого больше ОП.
                 </p>
               </div>
               <div className="cp-section-body">
@@ -597,19 +532,19 @@ export default function ClassPage() {
                 ) : null}
                 {!xpLbErr && leaderboardXp.length === 0 && myClasses.length > 0 ? (
                   <p className="cp-section-hint" style={{ padding: '12px 18px' }}>
-                    Пока нет данных по XP для класса.
+                    Пока нет данных по ОП для класса.
                   </p>
                 ) : null}
                 {!xpLbErr && myClasses.length === 0 ? (
                   <p className="cp-section-hint" style={{ padding: '12px 18px' }}>
-                    После вступления в класс здесь появится лидерборд по XP.
+                    После вступления в класс здесь появится таблица лидеров по ОП.
                   </p>
                 ) : null}
                 {leaderboardXp.length > 0 ? (
                   <div className="cp-lb-header" aria-hidden>
                     <span>Место</span>
                     <span>Ученик</span>
-                    <span>Уровень и XP</span>
+                    <span>Уровень и ОП</span>
                   </div>
                 ) : null}
                 {leaderboardXp.map((row, i) => {
@@ -646,7 +581,7 @@ export default function ClassPage() {
                         <div
                           className="cp-bar cp-bar--xp"
                           aria-hidden
-                          title="Доля от максимума «уровень + XP» в классе"
+                          title="Доля от максимума «уровень + ОП» в классе"
                         >
                           <div
                             className="cp-bar-fill cp-bar-fill--xp"
@@ -656,54 +591,12 @@ export default function ClassPage() {
                       </div>
                       <div className="cp-lb-points">
                         <span className="cp-lb-level">Ур. {row.level}</span>
-                        <span className="cp-lb-xp">{row.points} XP</span>
+                        <span className="cp-lb-xp">{row.points} ОП</span>
                       </div>
                     </div>
                   )
                 })}
               </div>
-          </section>
-
-          <section className="cp-section" aria-labelledby="cp-class-title">
-            <div className="cp-section-head">
-              <h2 id="cp-class-title" className="cp-section-title">
-                Список класса
-              </h2>
-              <p className="cp-section-hint">
-                По алфавиту · монеты и XP как в соседних колонках
-              </p>
-            </div>
-            <div className="cp-section-body">
-              {classList.length === 0 && myClasses.length > 0 ? (
-                <p className="cp-section-hint" style={{ padding: '12px 18px' }}>
-                  Список пуст.
-                </p>
-              ) : null}
-              {classList.map((row, index) => (
-                <div
-                  key={`${row.id}-c-${index}`}
-                  className={`cp-class-row${row.isMe ? ' cp-class-row--me' : ''}`}
-                >
-                  <span className="cp-num">{index + 1}</span>
-                  <div className="cp-class-info">
-                    <span className="cp-avatar" aria-hidden />
-                    <div style={{ minWidth: 0 }}>
-                      <div className="cp-class-name">{row.name}</div>
-                    </div>
-                  </div>
-                  <div className="cp-class-pts">
-                    <span className="cp-class-lv">Ур. {row.level}</span>
-                    <span className="cp-class-xp">{row.points} мон.</span>
-                    <span className="cp-class-xp-total">{row.xpTotal} XP</span>
-                    {row.isMe ? (
-                      <span className="cp-badge" style={{ marginLeft: 8 }}>
-                        Вы
-                      </span>
-                    ) : null}
-                  </div>
-                </div>
-              ))}
-            </div>
           </section>
         </div>
       </div>

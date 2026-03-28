@@ -6,18 +6,17 @@ import './ArtemiySkinShopModal.css'
 
 const SLOT_LABEL = {
   skin: 'Скины',
-  hat: 'Головной убор',
   accessory: 'Аксессуар',
 }
 
-const SLOT_ORDER = ['skin', 'hat', 'accessory']
+const SLOT_ORDER = ['skin', 'accessory']
 
 export default function ArtemiySkinShopModal({
   open,
   onClose,
   userRole,
   onEconomyUpdated,
-  /** 'skin' | 'hat' | 'accessory' — прокрутить к секции при открытии */
+  /** 'skin' | 'accessory' — прокрутить к секции при открытии */
   focusSlot = null,
 }) {
   const [loading, setLoading] = useState(true)
@@ -81,7 +80,6 @@ export default function ArtemiySkinShopModal({
 
   const ownedSet = new Set(mascot?.owned_item_ids ?? [])
   const equippedSkin = mascot?.skin_item_id ?? null
-  const equippedHat = mascot?.hat_item_id ?? null
 
   const buy = async (item) => {
     if (userRole !== 'child' || busy) return
@@ -109,25 +107,6 @@ export default function ArtemiySkinShopModal({
     const res = await apiFetch('/me/mascot/equip', {
       method: 'PUT',
       body: JSON.stringify({ skin_item_id: skinId }),
-    })
-    const data = await res.json().catch(() => null)
-    if (!res.ok) {
-      setError(parseErrorDetail(data))
-      setBusy(null)
-      return
-    }
-    setMascot(data)
-    onEconomyUpdated?.()
-    setBusy(null)
-  }
-
-  const equipHat = async (hatId) => {
-    if (userRole !== 'child' || busy) return
-    setBusy(`eq-hat-${hatId ?? 'none'}`)
-    setError('')
-    const res = await apiFetch('/me/mascot/equip', {
-      method: 'PUT',
-      body: JSON.stringify({ hat_item_id: hatId }),
     })
     const data = await res.json().catch(() => null)
     if (!res.ok) {
@@ -270,10 +249,6 @@ export default function ArtemiySkinShopModal({
                   <ul className="skin-shop-grid skin-shop-grid--compact">
                     {list.map((item) => {
                       const owned = ownedSet.has(item.id)
-                      const worn =
-                        slot === 'hat'
-                          ? equippedHat === item.id
-                          : mascot?.accessory_item_id === item.id
                       return (
                         <li key={item.id} className="skin-shop-card skin-shop-card--compact">
                           <div className="skin-shop-card-body">
@@ -281,33 +256,6 @@ export default function ArtemiySkinShopModal({
                             <span className="skin-shop-card-meta">
                               {owned ? 'Куплено' : `${item.price} монет`}
                             </span>
-                            {slot === 'hat' &&
-                              (owned ? (
-                                worn ? (
-                                  <span className="skin-shop-badge">Надето</span>
-                                ) : (
-                                  <button
-                                    type="button"
-                                    className="skin-shop-btn skin-shop-btn--secondary"
-                                    disabled={Boolean(busy)}
-                                    onClick={() => equipHat(item.id)}
-                                  >
-                                    {busy === `eq-hat-${item.id}` ? '…' : 'Надеть'}
-                                  </button>
-                                )
-                              ) : (
-                                <button
-                                  type="button"
-                                  className="skin-shop-btn"
-                                  disabled={
-                                    Boolean(busy) ||
-                                    (balance !== null && balance < item.price)
-                                  }
-                                  onClick={() => buy(item)}
-                                >
-                                  {busy === `buy-${item.id}` ? '…' : 'Купить'}
-                                </button>
-                              ))}
                             {slot === 'accessory' && (
                               <span className="skin-shop-card-meta">Скоро</span>
                             )}
@@ -316,18 +264,6 @@ export default function ArtemiySkinShopModal({
                       )
                     })}
                   </ul>
-                  {slot === 'hat' && equippedHat != null ? (
-                    <div className="skin-shop-hat-actions">
-                      <button
-                        type="button"
-                        className="skin-shop-linkish"
-                        disabled={Boolean(busy)}
-                        onClick={() => equipHat(null)}
-                      >
-                        {busy === 'eq-hat-none' ? 'Снимаем…' : 'Снять головной убор'}
-                      </button>
-                    </div>
-                  ) : null}
                 </section>
               )
             })}

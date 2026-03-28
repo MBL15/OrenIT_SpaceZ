@@ -29,6 +29,7 @@ from app.sqlite_migrate import (
     apply_sqlite_migrations,
     backfill_class_invite_codes,
     ensure_catalog_blocks_2_3_teacher_assignable,
+    ensure_map_lesson_templates_ignore_platform_practice,
     ensure_teacher_assignable_platform,
 )
 
@@ -48,6 +49,7 @@ async def lifespan(_: FastAPI):
         ensure_mascot_catalog(db)
         ensure_teacher_assignable_platform(db)
         ensure_catalog_blocks_2_3_teacher_assignable(db)
+        ensure_map_lesson_templates_ignore_platform_practice(db)
         sync_asgard_lesson_tasks(db)
     finally:
         db.close()

@@ -158,6 +158,51 @@ def apply_sqlite_migrations(engine) -> None:
         )
         conn.commit()
 
+        # Как у Асгарда: награда за урок на карте не зависит от отдельной практики по шаблону урока 2–3
+        conn.execute(
+            text(
+                """
+                UPDATE task_templates
+                SET counts_toward_lesson_practice = 0
+                WHERE lesson_id IN (
+                    SELECT id FROM lessons
+                    WHERE title IN (
+                        'Йотунхейм — встреча с драконом',
+                        'Ванахейм — знакомство с землёй'
+                    )
+                )
+                """
+            )
+        )
+        conn.commit()
+
+
+def ensure_map_lesson_templates_ignore_platform_practice(session: Session) -> None:
+    """Postgres и др.: как в seed — шаблоны уроков 2–3 не блокируют бонус за прохождение на карте.
+
+    Для SQLite то же делает UPDATE в apply_sqlite_migrations; без этого шага на не-SQLite
+    grant_lesson_completion_xp_if_eligible не выдаёт ОП/коины до «практики на платформе».
+    """
+    titles = (
+        "Йотунхейм — встреча с драконом",
+        "Ванахейм — знакомство с землёй",
+    )
+    changed = False
+    for title in titles:
+        lesson = session.query(Lesson).filter(Lesson.title == title).first()
+        if not lesson:
+            continue
+        for tmpl in (
+            session.query(TaskTemplate)
+            .filter(TaskTemplate.lesson_id == lesson.id)
+            .all()
+        ):
+            if tmpl.counts_toward_lesson_practice:
+                tmpl.counts_toward_lesson_practice = False
+                changed = True
+    if changed:
+        session.commit()
+
 
 def backfill_class_invite_codes(session: Session) -> None:
     """Заполняет invite_code для строк, где колонка NULL (после ALTER)."""

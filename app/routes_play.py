@@ -55,8 +55,8 @@ class LeaderRow(BaseModel):
     user_id: int
     display_name: str
     avatar_id: str | None
-    xp: int = Field(description="Очки опыта")
-    level: int = Field(description="Уровень (от суммарного XP)")
+    xp: int = Field(description="Очки опыта (ОП)")
+    level: int = Field(description="Уровень (от суммарного ОП)")
 
 
 class CoinsLeaderRow(BaseModel):
@@ -65,7 +65,7 @@ class CoinsLeaderRow(BaseModel):
     display_name: str
     avatar_id: str | None
     coins_earned_total: int = Field(description="Всего заработано коинов за всё время")
-    level: int = Field(description="Уровень (от суммарного XP)")
+    level: int = Field(description="Уровень (от суммарного ОП)")
 
 
 class PublicProfile(BaseModel):
@@ -76,7 +76,7 @@ class PublicProfile(BaseModel):
     avatar_id: str | None
     xp_total: int = Field(description="Всего очков опыта")
     xp_week: int = Field(description="Очки опыта за неделю")
-    level: int = Field(description="Уровень (от суммарного XP)")
+    level: int = Field(description="Уровень (от суммарного ОП)")
 
 
 def _now_iso() -> str:
@@ -108,7 +108,7 @@ def _assert_class_coins_leaderboard_access(db: Session, user: User, class_id: in
         return c
     raise HTTPException(
         status_code=status.HTTP_403_FORBIDDEN,
-        detail="Нет доступа к лидерборду этого класса",
+        detail="Нет доступа к таблице лидеров этого класса",
     )
 
 
@@ -292,7 +292,7 @@ def leaderboard_for_class(
     db: Annotated[Session, Depends(get_db)],
     user: Annotated[User, Depends(get_current_user)],
 ) -> list[LeaderRow]:
-    """Ученики одного класса: сортировка по уровню (и при равенстве — по суммарному XP)."""
+    """Ученики одного класса: сортировка по уровню (и при равенстве — по суммарному ОП)."""
     _assert_class_coins_leaderboard_access(db, user, class_id)
     rows = (
         db.query(User, UserStat)

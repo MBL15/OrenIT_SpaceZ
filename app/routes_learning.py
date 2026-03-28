@@ -646,7 +646,7 @@ def my_teacher_assignments(
 
 class TheoryCompleteOut(BaseModel):
     xp_awarded: int = Field(
-        description="Начислено XP за завершение урока (теория+практика, один раз)",
+        description="Начислено ОП за завершение урока (теория+практика, один раз)",
     )
     coins_awarded: int = Field(
         description="Начислено коинов за завершение урока (аналогично)",
@@ -695,7 +695,7 @@ def mark_theory_complete(
 # --- practice ---
 
 ASSIGNMENT_REPEAT_NOTICE = (
-    "Вы уже проходили это задание. При повторном прохождении Монеты и XP начисляться не будут."
+    "Вы уже проходили это задание. При повторном прохождении Монеты и ОП начисляться не будут."
 )
 
 
@@ -731,7 +731,7 @@ class SubmitPracticeResponse(BaseModel):
         description="Изменение коинов: начисление за верный ответ или списание за ошибку (отрицательное)",
     )
     xp_awarded: int = Field(
-        description="Изменение XP: награда за задачу, штраф за ошибку (отрицательное) или бонус за урок",
+        description="Изменение ОП: награда за задачу, штраф за ошибку (отрицательное) или бонус за урок",
     )
     notice: str | None = None
     grade_2_5: int | None = Field(

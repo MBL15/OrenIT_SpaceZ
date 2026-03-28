@@ -7,7 +7,7 @@ import { consumeNewAchievementNotifications } from '../lib/achievementNotificati
 import { useArtemiySkin } from '../hooks/useArtemiySkin.js'
 import './ProfilePage.css'
 
-/** Синхронно с `XP_PER_LEVEL` в app/services.py — новый уровень каждые 1000 XP. */
+/** Синхронно с `XP_PER_LEVEL` в app/services.py — новый уровень каждые 1000 ОП. */
 const XP_PER_LEVEL = 1000
 
 function achievementsFetchErrorMessage(res, data) {
@@ -16,16 +16,10 @@ function achievementsFetchErrorMessage(res, data) {
     const where = base
       ? `Запрос ушёл на API: ${base}. Там должна быть эта же версия кода.`
       : 'В dev запрос идёт через Vite на тот же компьютер (прокси → обычно порт 8000).'
-    return `Ачивки недоступны: сервер ответил «не найдено». ${where} Запуск из корня проекта: uvicorn app.main:app --reload --host 127.0.0.1 --port 8000`
+    return `Достижения недоступны: сервер ответил «не найдено». ${where} Запуск из корня проекта: uvicorn app.main:app --reload --host 127.0.0.1 --port 8000`
   }
   return parseErrorDetail(data)
 }
-
-const SKIN_TABS = [
-  { id: 'skin', label: 'Скины' },
-  { id: 'hat', label: 'Головной убор' },
-  { id: 'accessory', label: 'Аксессуар' },
-]
 
 function getChildXpProgress(u) {
   if (!u || u.role !== 'child') return null
@@ -50,7 +44,6 @@ export default function ProfilePage() {
   const [shopOpen, setShopOpen] = useState(false)
   const [balance, setBalance] = useState(null)
   const [progress, setProgress] = useState(() => getChildXpProgress(user))
-  const [skinSlotTab, setSkinSlotTab] = useState('skin')
   const [achievements, setAchievements] = useState([])
   const [achievementsLoading, setAchievementsLoading] = useState(false)
   const [achievementsErr, setAchievementsErr] = useState('')
@@ -205,28 +198,20 @@ export default function ProfilePage() {
                 <h1 className="pf-armory-title">{displayName}</h1>
               </div>
 
-              <div className="pf-armory-tabs" role="tablist" aria-label="Слоты внешнего вида">
-                {SKIN_TABS.map((t) => (
-                  <button
-                    key={t.id}
-                    type="button"
-                    role="tab"
-                    aria-selected={skinSlotTab === t.id}
-                    className={`pf-armory-tab${skinSlotTab === t.id ? ' pf-armory-tab--on' : ''}`}
-                    title={`Открыть магазин: ${t.label}`}
-                    onClick={() => {
-                      setSkinSlotTab(t.id)
-                      setShopOpen(true)
-                    }}
-                  >
-                    {t.label}
-                  </button>
-                ))}
+              <div className="pf-armory-tabs">
+                <button
+                  type="button"
+                  className="pf-armory-tab pf-armory-tab--on"
+                  title="Открыть магазин"
+                  onClick={() => setShopOpen(true)}
+                >
+                  Магазин
+                </button>
               </div>
 
               <div className="pf-armory-grid">
                 <aside className="pf-armory-col pf-armory-col--left" aria-label="Достижения">
-                  <h2 className="pf-armory-col-title">Ачивки</h2>
+                  <h2 className="pf-armory-col-title">Достижения</h2>
                   <p className="pf-armory-col-hint">
                     {achievements.length > 0
                       ? `Открыто ${achievements.filter((a) => a.unlocked).length} из ${achievements.length}`
@@ -293,7 +278,7 @@ export default function ProfilePage() {
                         <span className="pf-xp-hero-label">Всего опыта</span>
                         <div className="pf-xp-hero-line">
                           <strong className="pf-xp-hero-value">{progress.xp_total}</strong>
-                          <span className="pf-xp-hero-unit">XP</span>
+                          <span className="pf-xp-hero-unit">ОП</span>
                         </div>
                       </div>
                       <div className="pf-progress-row">
@@ -301,7 +286,7 @@ export default function ProfilePage() {
                         <strong className="pf-progress-value">{progress.level}</strong>
                       </div>
                       <p className="pf-level-rule">
-                        Каждые {XP_PER_LEVEL} суммарного XP — новый уровень.
+                        Каждые {XP_PER_LEVEL} суммарного ОП — новый уровень.
                       </p>
                       {(() => {
                         const total = progress.xp_total
@@ -315,7 +300,7 @@ export default function ProfilePage() {
                                 До уровня {progress.level + 1}
                               </span>
                               <span className="pf-level-track-nums">
-                                {inLevel} / {XP_PER_LEVEL} XP
+                                {inLevel} / {XP_PER_LEVEL} ОП
                               </span>
                             </div>
                             <div
@@ -332,7 +317,7 @@ export default function ProfilePage() {
                               />
                             </div>
                             <p className="pf-level-next">
-                              Осталось <strong>{toNext}</strong> XP до следующего уровня
+                              Осталось <strong>{toNext}</strong> ОП до следующего уровня
                             </p>
                           </div>
                         )
@@ -403,7 +388,7 @@ export default function ProfilePage() {
         open={shopOpen}
         onClose={() => setShopOpen(false)}
         userRole={user?.role}
-        focusSlot={user?.role === 'child' ? skinSlotTab : null}
+        focusSlot={null}
         onEconomyUpdated={() => {
           void loadWallet()
           void refreshSkin()
@@ -426,7 +411,7 @@ export default function ProfilePage() {
           aria-atomic="true"
         >
           <div className="pf-ach-toast">
-            <p className="pf-ach-toast-kicker">Получена ачивка</p>
+            <p className="pf-ach-toast-kicker">Получено достижение</p>
             <div className="pf-ach-toast-main">
               <span className="pf-ach-toast-icon" aria-hidden="true">
                 {toastAch.icon}

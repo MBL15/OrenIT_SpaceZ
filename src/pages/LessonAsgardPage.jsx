@@ -483,14 +483,14 @@ export default function LessonAsgardPage() {
                 </>
               ) : rewardModal?.mode === 'api' ? (
                 <>
-                  Вы получили +{rewardModal.coins} мон. и +{rewardModal.xp} XP.
+                  Вы получили +{rewardModal.coins} мон. и +{rewardModal.xp} ОП.
                   {rewardModal.balance != null
                     ? ` Текущий баланс: ${rewardModal.balance} мон.`
                     : ''}
                 </>
               ) : rewardModal?.mode === 'offline' ? (
                 <>
-                  За тест положено +{OFFLINE_REWARD_COINS} мон. и +{OFFLINE_REWARD_XP} XP.
+                  За тест положено +{OFFLINE_REWARD_COINS} мон. и +{OFFLINE_REWARD_XP} ОП.
                   {user?.role !== 'child'
                     ? ' Войдите как ученик, чтобы начисление сохранилось в профиле.'
                     : ' Начисление на аккаунт недоступно (проверьте связь с сервером).'}

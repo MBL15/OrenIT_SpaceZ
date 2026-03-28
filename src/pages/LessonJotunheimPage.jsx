@@ -5,8 +5,24 @@ import { shuffleArray } from '../lib/shuffleQuizOptions.js'
 import { useAuth } from '../AuthContext.jsx'
 import { useArtemiySkin } from '../hooks/useArtemiySkin.js'
 import { lessonCutsceneBgUrl } from '../lib/lessonCutsceneBg.js'
+import { apiFetch, parseErrorDetail } from '../api.js'
+import { useDialogPresence } from '../hooks/useDialogPresence.js'
 import './LessonAsgardPage.css'
 import './LessonJotunheimPage.css'
+
+/** Совпадает с названием урока в БД (seed). */
+const JOTUNHEIM_LESSON_TITLE = 'Йотунхейм — встреча с драконом'
+const STORAGE_KEY = 'spaceedu-jotunheim-complete'
+const OFFLINE_REWARD_COINS = 10
+const OFFLINE_REWARD_XP = 100
+
+function readGuestComplete() {
+  try {
+    return localStorage.getItem(STORAGE_KEY) === '1'
+  } catch {
+    return false
+  }
+}
 
 const CUTSCENE_LINES = [
   {
@@ -28,20 +44,6 @@ const CUTSCENE_LINES = [
   },
 ]
 
-/** Катсцена после успешного прохождения всех трёх задач */
-const OUTRO_LINES = [
-  {
-    side: 'left',
-    speaker: 'Алиса',
-    text: 'Ты ответил правильно на мои вопросы. Я тебя пропускаю дальше.',
-  },
-  {
-    side: 'right',
-    speaker: 'Артемий',
-    text: 'Спасибо! Тогда иду по карте дальше.',
-  },
-]
-
 export default function LessonJotunheimPage() {
   const navigate = useNavigate()
   const { user } = useAuth()
@@ -50,10 +52,23 @@ export default function LessonJotunheimPage() {
     () => lessonCutsceneBgUrl('jotunheim', user?.role, skinItemId, shopItems),
     [user?.role, skinItemId, shopItems],
   )
-  /** cutscene | quiz | outro | success */
+
+  const [jotunheimLessonId, setJotunheimLessonId] = useState(null)
+  /** Пока false — для ученика не показываем катсцену (ждём урок + прогресс, чтобы сразу дать «уже пройдено»). */
+  const [progressGateReady, setProgressGateReady] = useState(
+    () => user?.role !== 'child',
+  )
+  const [completedView, setCompletedView] = useState(() =>
+    user?.role === 'child' ? false : readGuestComplete(),
+  )
+  /** true — зашли на страницу, урок уже был сдан (показать предупреждение о повторе). */
+  const [repeatVisitNotice, setRepeatVisitNotice] = useState(false)
+  const [showCorrectModal, setShowCorrectModal] = useState(false)
+  const [rewardModal, setRewardModal] = useState(null)
+
+  /** cutscene | quiz */
   const [view, setView] = useState('cutscene')
   const [cutsceneIndex, setCutsceneIndex] = useState(0)
-  const [outroIndex, setOutroIndex] = useState(0)
 
   const [questionStep, setQuestionStep] = useState(1)
   /** выбранный в пропуске id: and | or | imp */
@@ -72,6 +87,147 @@ export default function LessonJotunheimPage() {
     setSlotOutcome(null)
   }, [questionStep])
 
+  useEffect(() => {
+    if (user?.role !== 'child') {
+      setProgressGateReady(true)
+      return undefined
+    }
+    let cancelled = false
+    setProgressGateReady(false)
+    ;(async () => {
+      try {
+        const res = await apiFetch('/lessons')
+        if (!res.ok || cancelled) return
+        const list = await res.json().catch(() => [])
+        const found = Array.isArray(list)
+          ? list.find((l) => l.title === JOTUNHEIM_LESSON_TITLE)
+          : null
+        if (found?.id == null) return
+        setJotunheimLessonId(found.id)
+        const pr = await apiFetch('/me/progress')
+        if (!pr.ok || cancelled) return
+        const rows = await pr.json().catch(() => [])
+        const row = Array.isArray(rows)
+          ? rows.find((r) => Number(r.lesson_id) === Number(found.id))
+          : null
+        if (row?.theory_done) {
+          setCompletedView(true)
+          setRepeatVisitNotice(true)
+        }
+      } finally {
+        if (!cancelled) setProgressGateReady(true)
+      }
+    })()
+    return () => {
+      cancelled = true
+    }
+  }, [user?.role])
+
+  const finishCorrectModal = useCallback(() => {
+    setShowCorrectModal(false)
+    setCompletedView(true)
+    setRepeatVisitNotice(false)
+  }, [])
+
+  const {
+    shouldRender: resultModalVisible,
+    exiting: resultModalExiting,
+    requestClose: requestCloseResultModal,
+    handleExitEnd: handleResultModalExitEnd,
+  } = useDialogPresence(showCorrectModal, finishCorrectModal)
+
+  const handleLessonComplete = async () => {
+    setRewardModal(null)
+
+    let lessonId = jotunheimLessonId
+    if (user?.role === 'child' && lessonId == null) {
+      try {
+        const res = await apiFetch('/lessons')
+        if (res.ok) {
+          const list = await res.json().catch(() => [])
+          const found = Array.isArray(list)
+            ? list.find((l) => l.title === JOTUNHEIM_LESSON_TITLE)
+            : null
+          if (found?.id != null) {
+            lessonId = found.id
+            setJotunheimLessonId(found.id)
+          }
+        }
+      } catch {
+        /* ниже — офлайн / гость */
+      }
+    }
+
+    if (user?.role === 'child' && lessonId != null) {
+      try {
+        const res = await apiFetch(`/lessons/${lessonId}/theory-complete`, {
+          method: 'POST',
+        })
+        const data = await res.json().catch(() => ({}))
+        if (res.ok) {
+          let balance = null
+          const wRes = await apiFetch('/me/wallet')
+          if (wRes.ok) {
+            const w = await wRes.json().catch(() => ({}))
+            balance = w.coins ?? w.balance ?? null
+          }
+          const xp = data.xp_awarded ?? 0
+          const coins = data.coins_awarded ?? 0
+          setRewardModal({
+            mode: 'api',
+            xp,
+            coins,
+            balance,
+            duplicate: xp === 0 && coins === 0,
+          })
+        } else if (res.status === 403) {
+          try {
+            localStorage.setItem(STORAGE_KEY, '1')
+          } catch {
+            /* ignore */
+          }
+          setRewardModal({
+            mode: 'offline',
+            xp: OFFLINE_REWARD_XP,
+            coins: OFFLINE_REWARD_COINS,
+            balance: null,
+          })
+        } else {
+          setRewardModal({
+            mode: 'error',
+            message: parseErrorDetail(data),
+          })
+        }
+      } catch {
+        try {
+          localStorage.setItem(STORAGE_KEY, '1')
+        } catch {
+          /* ignore */
+        }
+        setRewardModal({
+          mode: 'offline',
+          xp: OFFLINE_REWARD_XP,
+          coins: OFFLINE_REWARD_COINS,
+          balance: null,
+        })
+      }
+    } else {
+      try {
+        localStorage.setItem(STORAGE_KEY, '1')
+      } catch {
+        /* ignore */
+      }
+      setRewardModal({
+        mode: 'offline',
+        xp: OFFLINE_REWARD_XP,
+        coins: OFFLINE_REWARD_COINS,
+        balance: null,
+      })
+    }
+
+    setShowCorrectModal(true)
+  }
+
   const backToMap = () => {
     navigate('/app', { state: { openTab: 'cs' } })
   }
@@ -86,7 +242,6 @@ export default function LessonJotunheimPage() {
     setQuestionStep(1)
     setSlotOpId(null)
     setSlotOutcome(null)
-    setOutroIndex(0)
     setView('quiz')
   }
 
@@ -118,20 +273,27 @@ export default function LessonJotunheimPage() {
   }
 
   const line = CUTSCENE_LINES[cutsceneIndex]
-  const outroLine = OUTRO_LINES[outroIndex]
 
-  const goToNextOutro = () => {
-    if (outroIndex < OUTRO_LINES.length - 1) {
-      setOutroIndex((v) => v + 1)
-    }
-  }
-
-  if (view === 'success') {
+  if (user?.role === 'child' && !progressGateReady) {
     return (
       <div className="asg-wrap">
         <div className="asg-layout">
           <div className="asg-panel">
-            <div className="asg-success" style={{ padding: '32px 24px' }}>
+            <p className="asg-p" style={{ padding: '2rem' }}>
+              Загрузка…
+            </p>
+          </div>
+        </div>
+      </div>
+    )
+  }
+
+  if (completedView) {
+    return (
+      <div className="asg-wrap">
+        <div className="asg-layout">
+          <div className="asg-panel">
+            <div className="asg-success">
               <button type="button" className="asg-back asg-back--success" onClick={backToMap}>
                 ← К карте курса
               </button>
@@ -139,9 +301,19 @@ export default function LessonJotunheimPage() {
                 ✓
               </span>
               <h1 className="asg-title">Урок «Йотунхейм» пройден</h1>
-              <p className="asg-lead">
-                Логические операции освоены. Возвращайтесь к карте курса или пройдите урок снова.
-              </p>
+              {repeatVisitNotice ? (
+                <div className="asg-repeat-banner" role="status">
+                  <p className="asg-p">
+                    Этот урок вы уже проходили. При повторном прохождении монеты и ОП начисляться не
+                    будут.
+                  </p>
+                </div>
+              ) : (
+                <p className="asg-lead">
+                  Вы завершили урок «Йотунхейм». Можно возвращаться к карте и открывать следующие
+                  точки.
+                </p>
+              )}
               <div className="asg-success-actions">
                 <button type="button" className="asg-btn-primary" onClick={backToMap}>
                   Вернуться к карте
@@ -150,70 +322,26 @@ export default function LessonJotunheimPage() {
                   type="button"
                   className="asg-btn-secondary"
                   onClick={() => {
+                    try {
+                      localStorage.removeItem(STORAGE_KEY)
+                    } catch {
+                      /* ignore */
+                    }
+                    setCompletedView(false)
+                    setRepeatVisitNotice(false)
                     setView('cutscene')
                     setCutsceneIndex(0)
-                    setOutroIndex(0)
                     setQuestionStep(1)
                     setSlotOpId(null)
                     setSlotOutcome(null)
+                    setShowCorrectModal(false)
+                    setRewardModal(null)
                   }}
                 >
-                  С начала урока
+                  Пройти урок снова
                 </button>
               </div>
             </div>
-          </div>
-        </div>
-      </div>
-    )
-  }
-
-  if (view === 'outro') {
-    return (
-      <div className="asg-wrap">
-        <div className="asg-layout">
-          <div className="asg-panel">
-            <section className="asg-cutscene" aria-labelledby="jot-outro-title">
-              <div className="asg-cutscene-top">
-                <button type="button" className="asg-back" onClick={backToMap}>
-                  ← К карте курса
-                </button>
-                <p className="asg-breadcrumb">Катсцена · После испытания</p>
-                <h1 id="jot-outro-title" className="asg-title">
-                  Йотунхейм: прощание с Алисой
-                </h1>
-              </div>
-
-              <div
-                className="jot-cutscene-stage"
-                style={{ backgroundImage: `url(${jotunCutsceneBgUrl})` }}
-                onClick={goToNextOutro}
-                role="presentation"
-              >
-                <div
-                  className={`jot-bubble ${outroLine.side === 'left' ? 'jot-bubble--left' : 'jot-bubble--right'}`}
-                >
-                  <span className="jot-bubble-speaker">{outroLine.speaker}</span>
-                  <span className="jot-bubble-text">{outroLine.text}</span>
-                </div>
-              </div>
-
-              <div className="asg-cutscene-actions">
-                <button
-                  type="button"
-                  className="asg-btn-primary"
-                  onClick={() => {
-                    if (outroIndex < OUTRO_LINES.length - 1) {
-                      goToNextOutro()
-                    } else {
-                      setView('success')
-                    }
-                  }}
-                >
-                  {outroIndex < OUTRO_LINES.length - 1 ? 'Далее' : 'Продолжить'}
-                </button>
-              </div>
-            </section>
           </div>
         </div>
       </div>
@@ -224,7 +352,8 @@ export default function LessonJotunheimPage() {
     const slotSymbol = slotOpId ? JOTUN_OPS.find((o) => o.id === slotOpId)?.symbol : null
 
     return (
-      <div className="asg-wrap">
+      <>
+        <div className="asg-wrap">
         <div className="asg-layout">
           <div className="asg-panel">
             <header className="asg-header">
@@ -295,14 +424,15 @@ export default function LessonJotunheimPage() {
                       className="asg-btn-primary"
                       onClick={() => {
                         if (isLastQuestion) {
-                          setOutroIndex(0)
-                          setView('outro')
+                          void handleLessonComplete()
                         } else {
                           setQuestionStep((s) => s + 1)
                         }
                       }}
                     >
-                      {isLastQuestion ? 'К финальной сцене' : `Задание ${questionStep + 1}`}
+                      {isLastQuestion
+                        ? 'Завершить блок вопросов'
+                        : `Задание ${questionStep + 1}`}
                     </button>
                   </>
                 ) : null}
@@ -311,6 +441,57 @@ export default function LessonJotunheimPage() {
           </div>
         </div>
       </div>
+        {resultModalVisible ? (
+          <div
+            className={`asg-result-backdrop${resultModalExiting ? ' asg-result-backdrop--exit' : ''}`}
+            role="presentation"
+          >
+            <div
+              className={`asg-result-modal${resultModalExiting ? ' asg-result-modal--exit' : ''}`}
+              role="dialog"
+              aria-modal="true"
+              aria-labelledby="jot-result-title"
+              onAnimationEnd={handleResultModalExitEnd}
+            >
+              <h2 id="jot-result-title" className="asg-h2">
+                Все правильно!
+              </h2>
+              <p className="asg-p">
+                {rewardModal?.mode === 'error' ? (
+                  <>{rewardModal.message}</>
+                ) : rewardModal?.mode === 'api' && rewardModal.duplicate ? (
+                  <>
+                    Награда за этот урок уже была начислена ранее (повторное прохождение без бонуса).
+                  </>
+                ) : rewardModal?.mode === 'api' ? (
+                  <>
+                    Вы получили +{rewardModal.coins} мон. и +{rewardModal.xp} ОП.
+                    {rewardModal.balance != null
+                      ? ` Текущий баланс: ${rewardModal.balance} мон.`
+                      : ''}
+                  </>
+                ) : rewardModal?.mode === 'offline' ? (
+                  <>
+                    За тест положено +{OFFLINE_REWARD_COINS} мон. и +{OFFLINE_REWARD_XP} ОП.
+                    {user?.role !== 'child'
+                      ? ' Войдите как ученик, чтобы начисление сохранилось в профиле.'
+                      : ' Начисление на аккаунт недоступно (проверьте связь с сервером).'}
+                  </>
+                ) : (
+                  <>Завершение урока…</>
+                )}
+              </p>
+              <button
+                type="button"
+                className="asg-btn-primary"
+                onClick={requestCloseResultModal}
+              >
+                Продолжить
+              </button>
+            </div>
+          </div>
+        ) : null}
+      </>
     )
   }
 

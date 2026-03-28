@@ -17,7 +17,7 @@ function rewardLine(row) {
   const x = Number(row.reward_xp) || 0
   const bits = []
   bits.push(c > 0 ? `${c} мон.` : 'без монет')
-  if (x > 0) bits.push(`${x} XP`)
+  if (x > 0) bits.push(`${x} ОП`)
   return bits.join(' · ')
 }
 
@@ -456,7 +456,7 @@ export default function AssignmentsPage() {
                       </p>
                     ) : null}
                     <p className="asm-result-stats">
-                      Изменение баланса: монеты {displayWorkout.result.coins_awarded ?? 0}, XP{' '}
+                      Изменение баланса: монеты {displayWorkout.result.coins_awarded ?? 0}, ОП{' '}
                       {displayWorkout.result.xp_awarded ?? 0}
                     </p>
                   </div>

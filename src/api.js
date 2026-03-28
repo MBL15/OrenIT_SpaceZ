@@ -35,7 +35,7 @@ export function clearToken() {
   }
 }
 
-/** Список ачивок ученика: /me/achievements, при 404 — запасной /achievements. */
+/** Список достижений ученика: /me/achievements, при 404 — запасной /achievements. */
 export async function fetchStudentAchievements() {
   let res = await apiFetch('/me/achievements')
   if (res.status === 404) {

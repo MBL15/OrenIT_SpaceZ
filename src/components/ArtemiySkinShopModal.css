@@ -228,23 +228,3 @@
   color: #1b5e20;
   border: 2px solid #4caf50;
 }
-
-.skin-shop-hat-actions {
-  margin-top: 10px;
-}
-
-.skin-shop-linkish {
-  border: none;
-  background: none;
-  padding: 0;
-  font-size: 13px;
-  font-weight: 600;
-  color: #616161;
-  cursor: pointer;
-  text-decoration: underline;
-  font-family: inherit;
-}
-
-.skin-shop-linkish:hover {
-  color: #1b5e20;
-}

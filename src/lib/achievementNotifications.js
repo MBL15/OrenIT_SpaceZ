@@ -1,4 +1,4 @@
-/** localStorage: уже «анонсированные» открытые ачивки (по пользователю). */
+/** localStorage: уже «анонсированные» открытые достижения (по пользователю). */
 export function achievementsAnnouncedStorageKey(userId) {
   return `orenit_achievements_announced_ids_${userId}`
 }
@@ -27,7 +27,7 @@ function writeAnnouncedIds(userId, ids) {
 }
 
 /**
- * После загрузки списка ачивок: первая синхронизация сохраняет текущие открытые без уведомлений;
+ * После загрузки списка достижений: первая синхронизация сохраняет текущие открытые без уведомлений;
  * далее возвращает только вновь открытые записи и дописывает их в storage.
  * @param {Array<{ id: string, unlocked: boolean }>} achievements
  * @param {number} userId
