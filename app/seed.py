@@ -14,6 +14,8 @@ from app.models import (
     MascotItem,
     TaskTemplate,
     User,
+    UserMascotEquipped,
+    UserMascotInventory,
 )
 from app.access import hash_password
 from app.asgard_platform import asgard_checker_json, asgard_teacher_task_specs
@@ -59,8 +61,8 @@ def seed_if_empty(db: Session) -> None:
         ensure_user_economy_rows(db, u.id)
 
     items = [
-        MascotItem(slug="skin-blue", name="Синий Артемий", price=20, slot="skin"),
-        MascotItem(slug="skin-gold", name="Золотой Артемий", price=50, slot="skin"),
+        MascotItem(slug="skin-academy", name="Космическая академия", price=40, slot="skin"),
+        MascotItem(slug="skin-knight", name="Тёмный рыцарь", price=80, slot="skin"),
         MascotItem(slug="hat-party", name="Праздничная шляпа", price=15, slot="hat"),
     ]
     db.add_all(items)
@@ -158,4 +160,52 @@ def seed_if_empty(db: Session) -> None:
         )
     )
 
+    db.commit()
+
+
+def _retire_mascot_items_by_slug(db: Session, slugs: tuple[str, ...]) -> None:
+    """Удаляет предметы из каталога и снимает их с экипировки / инвентаря."""
+    for slug in slugs:
+        item = db.query(MascotItem).filter(MascotItem.slug == slug).first()
+        if not item:
+            continue
+        iid = item.id
+        eqs = (
+            db.query(UserMascotEquipped)
+            .filter(
+                (UserMascotEquipped.skin_item_id == iid)
+                | (UserMascotEquipped.hat_item_id == iid)
+                | (UserMascotEquipped.accessory_item_id == iid)
+            )
+            .all()
+        )
+        for eq in eqs:
+            if eq.skin_item_id == iid:
+                eq.skin_item_id = None
+            if eq.hat_item_id == iid:
+                eq.hat_item_id = None
+            if eq.accessory_item_id == iid:
+                eq.accessory_item_id = None
+        db.query(UserMascotInventory).filter(UserMascotInventory.item_id == iid).delete(
+            synchronize_session=False
+        )
+        db.delete(item)
+
+
+def ensure_mascot_catalog(db: Session) -> None:
+    """Синхронизирует каталог маскота с актуальным набором предметов."""
+    _retire_mascot_items_by_slug(db, ("skin-blue", "skin-gold"))
+    rows = [
+        ("skin-academy", "Космическая академия", 40, "skin"),
+        ("skin-knight", "Тёмный рыцарь", 80, "skin"),
+        ("hat-party", "Праздничная шляпа", 15, "hat"),
+    ]
+    for slug, name, price, slot in rows:
+        existing = db.query(MascotItem).filter(MascotItem.slug == slug).first()
+        if existing:
+            existing.name = name
+            existing.price = price
+            existing.slot = slot
+        else:
+            db.add(MascotItem(slug=slug, name=name, price=price, slot=slot))
     db.commit()

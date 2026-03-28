@@ -8,30 +8,16 @@ import AsgardQuizEditorModal, {
 } from '../components/AsgardQuizEditorModal.jsx'
 import { isAdminUser } from '../auth.js'
 import { useAuth } from '../AuthContext.jsx'
-import { apiFetch, getToken, parseErrorDetail } from '../api.js'
 import {
   loadAsgardQuizSpec,
   specToQuizSteps,
 } from '../lib/asgardQuizSpec.js'
-import {
-  LESSON_COMPLETION_COINS,
-  LESSON_COMPLETION_XP,
-} from '../lib/lessonCompletionRewards.js'
 import { shuffleAllQuizSteps } from '../lib/shuffleQuizOptions.js'
 import './LessonAsgardPage.css'
 
 const STORAGE_KEY = 'spaceedu-asgard-complete'
 const POINTS_KEY = 'spaceedu-points'
-const ASGARD_LESSON_TITLE = 'Основы информатики — Асгард'
-const ENV_ASGARD = import.meta.env.VITE_ASGARD_LESSON_ID
-const PARSED_ENV_ASGARD =
-  ENV_ASGARD != null && String(ENV_ASGARD).trim() !== ''
-    ? Number(ENV_ASGARD)
-    : null
-const ENV_ASGARD_LESSON_ID =
-  Number.isFinite(PARSED_ENV_ASGARD) && PARSED_ENV_ASGARD > 0
-    ? PARSED_ENV_ASGARD
-    : null
+const LESSON_REWARD = 100
 const CUTSCENE_LINES = [
   {
     side: 'right',
@@ -92,12 +78,8 @@ export default function LessonAsgardPage() {
   const [inCutscene, setInCutscene] = useState(true)
   const [lessonStage, setLessonStage] = useState('theory')
   const [cutsceneIndex, setCutsceneIndex] = useState(0)
-  const [resolvedAsgardLessonId, setResolvedAsgardLessonId] = useState(
-    ENV_ASGARD_LESSON_ID,
-  )
   const [showCorrectModal, setShowCorrectModal] = useState(false)
-  const [rewardSummary, setRewardSummary] = useState(null)
-  const [completingLesson, setCompletingLesson] = useState(false)
+  const [lastAwardedPoints, setLastAwardedPoints] = useState(null)
   const [shuffledQuiz, setShuffledQuiz] = useState(null)
 
   const totalQuestions = quizSpec.length
@@ -111,36 +93,6 @@ export default function LessonAsgardPage() {
     return () => window.clearTimeout(timer)
   }, [inCutscene, cutsceneIndex])
 
-  useEffect(() => {
-    if (ENV_ASGARD_LESSON_ID != null) return undefined
-    let cancelled = false
-    ;(async () => {
-      try {
-        const res = await apiFetch('/lessons')
-        if (!res.ok || cancelled) return
-        const rows = await res.json().catch(() => [])
-        if (!Array.isArray(rows) || rows.length === 0) {
-          if (!cancelled) setResolvedAsgardLessonId(1)
-          return
-        }
-        const exact = rows.find((l) => l.title === ASGARD_LESSON_TITLE)
-        const loose = rows.find(
-          (l) => typeof l.title === 'string' && l.title.includes('Асгард'),
-        )
-        const hit = exact ?? loose
-        const id = hit?.id
-        if (!cancelled) {
-          setResolvedAsgardLessonId(typeof id === 'number' ? id : 1)
-        }
-      } catch {
-        if (!cancelled) setResolvedAsgardLessonId(1)
-      }
-    })()
-    return () => {
-      cancelled = true
-    }
-  }, [])
-
   const backToMap = () => {
     navigate('/app', { state: { openTab: 'cs' } })
   }
@@ -151,76 +103,14 @@ export default function LessonAsgardPage() {
     }
   }
 
-  const handleCorrectAnswer = async () => {
+  const handleCorrectAnswer = () => {
     if (!readComplete()) {
       try {
         localStorage.setItem(STORAGE_KEY, '1')
       } catch {
         /* ignore */
       }
-      const isChild = user?.role === 'child'
-      const token = getToken()
-      if (isChild && token) {
-        setCompletingLesson(true)
-        try {
-          const lessonId = resolvedAsgardLessonId ?? 1
-          const res = await apiFetch(
-            `/lessons/${lessonId}/theory-complete`,
-            { method: 'POST' },
-          )
-          const data = await res.json().catch(() => ({}))
-          if (res.ok) {
-            const xpG = Number(data.xp_awarded) || 0
-            const cG = Number(data.coins_awarded) || 0
-            const pending = xpG === 0 && cG === 0
-            let walletCoins = null
-            const wres = await apiFetch('/me/wallet')
-            if (wres.ok) {
-              const wd = await wres.json().catch(() => null)
-              const c = wd?.coins ?? wd?.balance
-              if (typeof c === 'number') walletCoins = c
-            }
-            setRewardSummary({
-              error: null,
-              xpGranted: xpG,
-              coinsGranted: cG,
-              pendingPractice: pending,
-              walletCoins,
-            })
-          } else {
-            setRewardSummary({
-              error: parseErrorDetail(data),
-              xpGranted: 0,
-              coinsGranted: 0,
-              pendingPractice: false,
-              walletCoins: null,
-            })
-          }
-        } catch {
-          setRewardSummary({
-            error: 'Не удалось связаться с сервером',
-            xpGranted: 0,
-            coinsGranted: 0,
-            pendingPractice: false,
-            walletCoins: null,
-          })
-        } finally {
-          setCompletingLesson(false)
-        }
-      } else {
-        const nextLocal = addPoints(LESSON_COMPLETION_XP)
-        setRewardSummary({
-          error: null,
-          xpGranted: LESSON_COMPLETION_XP,
-          coinsGranted: LESSON_COMPLETION_COINS,
-          pendingPractice: false,
-          walletCoins: null,
-          demoLocalXp: nextLocal,
-          demoNote: true,
-        })
-      }
-    } else {
-      setRewardSummary(null)
+      setLastAwardedPoints(addPoints(LESSON_REWARD))
     }
     setShowCorrectModal(true)
   }
@@ -292,7 +182,7 @@ export default function LessonAsgardPage() {
                     setLessonStage('theory')
                     setInCutscene(true)
                     setCutsceneIndex(0)
-                    setRewardSummary(null)
+                    setLastAwardedPoints(null)
                     setShuffledQuiz(null)
                   }}
                 >
@@ -441,18 +331,15 @@ export default function LessonAsgardPage() {
                             <button
                               type="button"
                               className="asg-btn-primary"
-                              disabled={isLastQuestion && completingLesson}
                               onClick={() =>
                                 isLastQuestion
-                                  ? void handleCorrectAnswer()
+                                  ? handleCorrectAnswer()
                                   : setQuestionStep((s) => s + 1)
                               }
                             >
-                              {isLastQuestion && completingLesson
-                                ? 'Сохраняем…'
-                                : isLastQuestion
-                                  ? 'Завершить блок вопросов'
-                                  : `Перейти к вопросу ${questionStep + 1}`}
+                              {isLastQuestion
+                                ? 'Завершить блок вопросов'
+                                : `Перейти к вопросу ${questionStep + 1}`}
                             </button>
                           </>
                         ) : null}
@@ -475,55 +362,10 @@ export default function LessonAsgardPage() {
             <h2 id="asg-result-title" className="asg-h2">
               Все правильно!
             </h2>
-            {rewardSummary?.error ? (
-              <p className="asg-p" role="alert">
-                {rewardSummary.error}
-              </p>
-            ) : null}
-            {rewardSummary?.pendingPractice ? (
-              <p className="asg-p">
-                Теория учтена. Полная награда урока — до {LESSON_COMPLETION_XP}{' '}
-                XP и {LESSON_COMPLETION_COINS} монет — будет начислена, когда
-                пройдёте практику этого урока на платформе.
-              </p>
-            ) : null}
-            {!rewardSummary?.pendingPractice &&
-            rewardSummary &&
-            (rewardSummary.xpGranted > 0 || rewardSummary.coinsGranted > 0) ? (
-              <p className="asg-p">
-                Начислено:{' '}
-                {rewardSummary.xpGranted > 0
-                  ? `+${rewardSummary.xpGranted} XP`
-                  : null}
-                {rewardSummary.xpGranted > 0 && rewardSummary.coinsGranted > 0
-                  ? ', '
-                  : null}
-                {rewardSummary.coinsGranted > 0
-                  ? `+${rewardSummary.coinsGranted} монет`
-                  : null}
-                .
-              </p>
-            ) : null}
-            {rewardSummary &&
-            !rewardSummary.pendingPractice &&
-            rewardSummary.xpGranted === 0 &&
-            rewardSummary.coinsGranted === 0 &&
-            !rewardSummary.error &&
-            !rewardSummary.demoNote ? (
-              <p className="asg-p">Теория отмечена как пройденная.</p>
-            ) : null}
-            {rewardSummary?.walletCoins != null ? (
-              <p className="asg-p">Монет на счёте сейчас: {rewardSummary.walletCoins}.</p>
-            ) : null}
-            {rewardSummary?.demoNote ? (
-              <p className="asg-p">
-                Демо без входа: зачтено как +{rewardSummary.xpGranted} XP и +
-                {rewardSummary.coinsGranted} монет (на сервер не отправляется).
-                {rewardSummary.demoLocalXp != null
-                  ? ` Локальный демо-счёт XP: ${rewardSummary.demoLocalXp}.`
-                  : ''}
-              </p>
-            ) : null}
+            <p className="asg-p">
+              Вы получили +{LESSON_REWARD} баллов.
+              {lastAwardedPoints != null ? ` Текущий баланс: ${lastAwardedPoints}.` : ''}
+            </p>
             <button
               type="button"
               className="asg-btn-primary"

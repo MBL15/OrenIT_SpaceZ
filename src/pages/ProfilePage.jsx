@@ -1,30 +1,51 @@
-import { useEffect, useState } from 'react'
+import { useCallback, useEffect, useState } from 'react'
 import { Link } from 'react-router-dom'
 import { apiFetch } from '../api.js'
 import { useAuth } from '../AuthContext.jsx'
-import mascotUrl from '../assets/mascot.png'
+import ArtemiySkinShopModal from '../components/ArtemiySkinShopModal.jsx'
+import { useArtemiySkin } from '../hooks/useArtemiySkin.js'
 import './ProfilePage.css'
 
 export default function ProfilePage() {
   const { user } = useAuth()
-  const [hint, setHint] = useState('')
+  const [shopOpen, setShopOpen] = useState(false)
   const [balance, setBalance] = useState(null)
+  const { src: artemiySrc, className: artemiySkinClass, refresh: refreshSkin } =
+    useArtemiySkin()
 
   const displayName =
     user?.display_name?.trim() || user?.name?.trim() || user?.login || 'Профиль'
 
-  useEffect(() => {
+  const loadWallet = useCallback(async () => {
     if (!user || user.role !== 'child') {
       setBalance(null)
       return
     }
+    const res = await apiFetch('/me/wallet')
+    if (!res.ok) return
+    const data = await res.json().catch(() => null)
+    if (data && typeof data.balance === 'number') {
+      setBalance(data.balance)
+    } else if (data && typeof data.coins === 'number') {
+      setBalance(data.coins)
+    }
+  }, [user])
+
+  useEffect(() => {
     let cancelled = false
     ;(async () => {
+      if (!user || user.role !== 'child') {
+        if (!cancelled) setBalance(null)
+        return
+      }
       const res = await apiFetch('/me/wallet')
       if (cancelled || !res.ok) return
       const data = await res.json().catch(() => null)
-      if (!cancelled && data && typeof data.balance === 'number') {
+      if (cancelled) return
+      if (data && typeof data.balance === 'number') {
         setBalance(data.balance)
+      } else if (data && typeof data.coins === 'number') {
+        setBalance(data.coins)
       }
     })()
     return () => {
@@ -66,9 +87,9 @@ export default function ProfilePage() {
 
           <div className="pf-mascot-wrap">
             <img
-              className="pf-mascot"
-              src={mascotUrl}
-              alt="Маскот SpacEdu — ученик в худи с рюкзаком"
+              className={['pf-mascot', artemiySkinClass].filter(Boolean).join(' ')}
+              src={artemiySrc}
+              alt="Маскот профиля SpacEdu"
             />
           </div>
 
@@ -76,19 +97,24 @@ export default function ProfilePage() {
             <button
               type="button"
               className="pf-btn-custom"
-              onClick={() =>
-                setHint(
-                  'Кастомизация появится позже: скины маскота, рамка профиля и тема.',
-                )
-              }
+              onClick={() => setShopOpen(true)}
             >
               Кастомизация
             </button>
-            {hint ? <p className="pf-hint">{hint}</p> : null}
             {user?.login ? <p className="pf-email">Логин: {user.login}</p> : null}
           </div>
         </main>
       </div>
+
+      <ArtemiySkinShopModal
+        open={shopOpen}
+        onClose={() => setShopOpen(false)}
+        userRole={user?.role}
+        onEconomyUpdated={() => {
+          void loadWallet()
+          void refreshSkin()
+        }}
+      />
     </div>
   )
 }

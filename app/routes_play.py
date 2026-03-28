@@ -208,30 +208,36 @@ def equip_mascot(
         if not it:
             raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Item not found")
 
-    _must_own(body.skin_item_id)
-    _must_own(body.hat_item_id)
-    _must_own(body.accessory_item_id)
-
     eq = db.get(UserMascotEquipped, user.id)
     ts = _now_iso()
     if not eq:
         eq = UserMascotEquipped(user_id=user.id, updated_at=ts)
         db.add(eq)
-    if body.skin_item_id is not None:
-        it = db.get(MascotItem, body.skin_item_id)
-        if it and it.slot != "skin":
-            raise HTTPException(status_code=400, detail="Wrong slot")
-        eq.skin_item_id = body.skin_item_id
-    if body.hat_item_id is not None:
-        it = db.get(MascotItem, body.hat_item_id)
-        if it and it.slot != "hat":
-            raise HTTPException(status_code=400, detail="Wrong slot")
-        eq.hat_item_id = body.hat_item_id
-    if body.accessory_item_id is not None:
-        it = db.get(MascotItem, body.accessory_item_id)
-        if it and it.slot != "accessory":
-            raise HTTPException(status_code=400, detail="Wrong slot")
-        eq.accessory_item_id = body.accessory_item_id
+    patch = body.model_dump(exclude_unset=True)
+    if "skin_item_id" in patch:
+        sid = patch["skin_item_id"]
+        if sid is not None:
+            _must_own(sid)
+            it = db.get(MascotItem, sid)
+            if it and it.slot != "skin":
+                raise HTTPException(status_code=400, detail="Wrong slot")
+        eq.skin_item_id = sid
+    if "hat_item_id" in patch:
+        hid = patch["hat_item_id"]
+        if hid is not None:
+            _must_own(hid)
+            it = db.get(MascotItem, hid)
+            if it and it.slot != "hat":
+                raise HTTPException(status_code=400, detail="Wrong slot")
+        eq.hat_item_id = hid
+    if "accessory_item_id" in patch:
+        aid = patch["accessory_item_id"]
+        if aid is not None:
+            _must_own(aid)
+            it = db.get(MascotItem, aid)
+            if it and it.slot != "accessory":
+                raise HTTPException(status_code=400, detail="Wrong slot")
+        eq.accessory_item_id = aid
     eq.updated_at = ts
     db.commit()
     owned = [r.item_id for r in db.query(UserMascotInventory).filter(UserMascotInventory.user_id == user.id).all()]
