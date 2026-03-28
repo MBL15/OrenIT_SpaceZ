@@ -263,6 +263,17 @@ class AssignmentOut(BaseModel):
     block_id: int | None = None
 
 
+def _effective_rewards_for_assignment(
+    db: Session, row: ClassTaskAssignment
+) -> tuple[int, int]:
+    """Для блока награда хранится в AssignmentBlock; в строках назначения — нули."""
+    if row.block_id is not None:
+        blk = db.get(AssignmentBlock, row.block_id)
+        if blk is not None:
+            return (blk.reward_coins, blk.reward_xp)
+    return (row.reward_coins, row.reward_xp)
+
+
 def _assignments_out_for_class(db: Session, class_id: int) -> list[AssignmentOut]:
     rows = (
         db.query(ClassTaskAssignment)
@@ -276,6 +287,7 @@ def _assignments_out_for_class(db: Session, class_id: int) -> list[AssignmentOut
         lesson = db.get(Lesson, tmpl.lesson_id) if tmpl else None
         if not tmpl or not lesson:
             continue
+        rc, rx = _effective_rewards_for_assignment(db, row)
         out.append(
             AssignmentOut(
                 id=row.id,
@@ -286,8 +298,8 @@ def _assignments_out_for_class(db: Session, class_id: int) -> list[AssignmentOut
                 task_title=tmpl.title,
                 note=row.note,
                 created_at=row.created_at,
-                reward_coins=row.reward_coins,
-                reward_xp=row.reward_xp,
+                reward_coins=rc,
+                reward_xp=rx,
                 block_id=row.block_id,
             )
         )
@@ -348,8 +360,9 @@ def assign_task_to_class(
 
 
 def _assignment_out_from_row(
-    row: ClassTaskAssignment, tmpl: TaskTemplate, lesson: Lesson
+    db: Session, row: ClassTaskAssignment, tmpl: TaskTemplate, lesson: Lesson
 ) -> AssignmentOut:
+    rc, rx = _effective_rewards_for_assignment(db, row)
     return AssignmentOut(
         id=row.id,
         class_id=row.class_id,
@@ -359,8 +372,8 @@ def _assignment_out_from_row(
         task_title=tmpl.title,
         note=row.note,
         created_at=row.created_at,
-        reward_coins=row.reward_coins,
-        reward_xp=row.reward_xp,
+        reward_coins=rc,
+        reward_xp=rx,
         block_id=row.block_id,
     )
 
@@ -446,7 +459,7 @@ def assign_tasks_batch_to_class(
         )
         db.add(row)
         db.flush()
-        out.append(_assignment_out_from_row(row, tmpl, lesson))
+        out.append(_assignment_out_from_row(db, row, tmpl, lesson))
 
     db.commit()
     return out
@@ -492,6 +505,7 @@ def teacher_assignments_history(
         lesson = db.get(Lesson, tmpl.lesson_id) if tmpl else None
         if not tmpl or not lesson:
             continue
+        rc, rx = _effective_rewards_for_assignment(db, row)
         out.append(
             AssignmentHistoryRow(
                 id=row.id,
@@ -502,8 +516,8 @@ def teacher_assignments_history(
                 task_title=tmpl.title,
                 note=row.note,
                 created_at=row.created_at,
-                reward_coins=row.reward_coins,
-                reward_xp=row.reward_xp,
+                reward_coins=rc,
+                reward_xp=rx,
                 class_name=cid_to_name.get(row.class_id, ""),
             )
         )
@@ -594,6 +608,31 @@ def _assignment_progress_rows(
     return out
 
 
+def _delete_one_assignment_cascade(db: Session, row: ClassTaskAssignment) -> int | None:
+    """Удаляет экземпляры задач и претензии на бонус по одному назначению. Возвращает block_id до удаления строки."""
+    aid = row.id
+    bid = row.block_id
+    for inst in db.query(TaskInstance).filter(TaskInstance.assignment_id == aid).all():
+        db.delete(inst)
+    db.query(TeacherAssignmentRewardClaim).filter(
+        TeacherAssignmentRewardClaim.assignment_id == aid
+    ).delete()
+    db.delete(row)
+    return bid
+
+
+def _maybe_delete_orphan_block(db: Session, block_id: int) -> None:
+    n = (
+        db.query(ClassTaskAssignment)
+        .filter(ClassTaskAssignment.block_id == block_id)
+        .count()
+    )
+    if n == 0:
+        blk = db.get(AssignmentBlock, block_id)
+        if blk:
+            db.delete(blk)
+
+
 @teacher_router.get(
     "/classes/{class_id}/assignments/{assignment_id}/progress",
     response_model=list[StudentAssignmentProgressOut],
@@ -620,6 +659,7 @@ def delete_class_assignment(
     db: Annotated[Session, Depends(get_db)],
     user: Annotated[User, Depends(require_roles("teacher", "admin"))],
 ) -> None:
+    """Удалить одно назначение (в т.ч. одну задачу из блока; блок остаётся, пока есть другие задачи)."""
     c = db.get(CourseClass, class_id)
     if not c:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Class not found")
@@ -628,16 +668,49 @@ def delete_class_assignment(
     row = db.get(ClassTaskAssignment, assignment_id)
     if not row or row.class_id != class_id:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Assignment not found")
-    if row.block_id is not None:
-        blk = db.get(AssignmentBlock, row.block_id)
-        if blk:
-            db.delete(blk)
+    bid = _delete_one_assignment_cascade(db, row)
+    db.flush()
+    if bid is not None:
+        _maybe_delete_orphan_block(db, bid)
+    db.commit()
+
+
+@teacher_router.delete(
+    "/classes/{class_id}/assignment-blocks/{block_id}",
+    status_code=status.HTTP_204_NO_CONTENT,
+)
+def delete_class_assignment_block(
+    class_id: int,
+    block_id: int,
+    db: Annotated[Session, Depends(get_db)],
+    user: Annotated[User, Depends(require_roles("teacher", "admin"))],
+) -> None:
+    """Удалить весь блок: все задачи этого пакета и общие настройки блока."""
+    c = db.get(CourseClass, class_id)
+    if not c:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Class not found")
+    if user.role != "admin" and c.teacher_id != user.id:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Class not found")
+    blk = db.get(AssignmentBlock, block_id)
+    if not blk or blk.class_id != class_id:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Block not found")
+    rows = (
+        db.query(ClassTaskAssignment)
+        .filter(
+            ClassTaskAssignment.block_id == block_id,
+            ClassTaskAssignment.class_id == class_id,
+        )
+        .all()
+    )
+    if not rows:
+        db.delete(blk)
         db.commit()
         return
-    db.query(TeacherAssignmentRewardClaim).filter(
-        TeacherAssignmentRewardClaim.assignment_id == assignment_id
-    ).delete()
-    db.delete(row)
+    for row in rows:
+        _delete_one_assignment_cascade(db, row)
+    blk2 = db.get(AssignmentBlock, block_id)
+    if blk2:
+        db.delete(blk2)
     db.commit()
 
 

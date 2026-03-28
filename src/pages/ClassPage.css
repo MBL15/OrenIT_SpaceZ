@@ -73,8 +73,9 @@
 .cp-main {
   padding: 24px 24px 32px;
   display: grid;
-  grid-template-columns: 1fr 1.15fr;
-  gap: 24px;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 20px;
+  align-items: start;
 }
 
 @media (max-width: 900px) {
@@ -196,6 +197,13 @@
   font-variant-numeric: tabular-nums;
 }
 
+.cp-lb-points--coins-only .cp-lb-xp {
+  font-size: 14px;
+  font-weight: 800;
+  color: var(--cp-green-dark);
+  opacity: 1;
+}
+
 .cp-lb-level {
   font-size: 15px;
   line-height: 1.2;
@@ -221,6 +229,10 @@
   height: 100%;
   border-radius: 4px;
   background: linear-gradient(90deg, var(--cp-green), var(--cp-green-dark));
+}
+
+.cp-bar-fill--xp {
+  background: linear-gradient(90deg, #9ccc65, #558b2f);
 }
 
 /* Список класса */
@@ -307,6 +319,12 @@
   font-size: 12px;
   font-weight: 600;
   color: #558b2f;
+}
+
+.cp-class-xp-total {
+  font-size: 12px;
+  font-weight: 600;
+  color: #33691e;
 }
 
 .cp-class-picker {
@@ -536,6 +554,41 @@
   padding-left: 1.2rem;
   color: var(--cp-green-dark);
   font-size: 14px;
+}
+
+.cp-teacher-assignments .cp-teacher-assignment-row {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  gap: 12px;
+  margin-bottom: 8px;
+  list-style: disc;
+}
+
+.cp-teacher-assignment-main {
+  flex: 1;
+  min-width: 0;
+}
+
+.cp-teacher-assignment-actions {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  gap: 6px;
+  flex-shrink: 0;
+}
+
+.cp-teacher-assignment-del-block {
+  font-size: 12px;
+  padding: 4px 10px;
+  white-space: nowrap;
+}
+
+.cp-teacher-assignment-del {
+  flex-shrink: 0;
+  font-size: 13px;
+  padding: 4px 10px;
+  margin-top: 0;
 }
 
 .cp-teacher-assign {

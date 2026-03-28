@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState } from 'react'
+import { useCallback, useEffect, useMemo, useState } from 'react'
 import { Link, Navigate } from 'react-router-dom'
 import { apiFetch, parseErrorDetail } from '../api.js'
 import { useAuth } from '../AuthContext.jsx'
@@ -39,6 +39,19 @@ export default function TeacherCabinetPage() {
   const [hwProgress, setHwProgress] = useState([])
   const [hwProgressLoading, setHwProgressLoading] = useState(false)
   const [hwProgressErr, setHwProgressErr] = useState('')
+  const [deletingAssignmentId, setDeletingAssignmentId] = useState(null)
+  const [deletingBlockId, setDeletingBlockId] = useState(null)
+
+  /** Одна кнопка «Удалить весь блок» на блок: показываем у первой строки этого block_id в списке. */
+  const blockDeleteAnchorId = useMemo(() => {
+    const m = new Map()
+    for (const a of assignments) {
+      if (a.block_id != null && !m.has(a.block_id)) {
+        m.set(a.block_id, a.id)
+      }
+    }
+    return m
+  }, [assignments])
 
   const loadClasses = useCallback(async () => {
     const res = await apiFetch('/teacher/classes')
@@ -64,6 +77,18 @@ export default function TeacherCabinetPage() {
       setLessons(Array.isArray(data) ? data : [])
     })()
   }, [user])
+
+  const refreshHwHistory = useCallback(async () => {
+    const res = await apiFetch('/teacher/assignments/history')
+    if (!res.ok) return
+    const data = await res.json().catch(() => [])
+    const list = Array.isArray(data) ? data : []
+    setHwHistory(list)
+    setHwSelected((prev) => {
+      if (!prev) return null
+      return list.some((r) => r.id === prev.id) ? prev : null
+    })
+  }, [])
 
   const loadClassDetails = useCallback(async (classId) => {
     if (!classId) return
@@ -290,6 +315,58 @@ export default function TeacherCabinetPage() {
       await loadClassDetails(selectedId)
     } finally {
       setPending(false)
+    }
+  }
+
+  const handleDeleteAssignment = async (a) => {
+    if (!selectedId) return
+    const ok = window.confirm(
+      'Удалить только это задание из назначенных? Прогресс учеников по нему будет удалён.',
+    )
+    if (!ok) return
+    setErr('')
+    setBanner('')
+    setDeletingAssignmentId(a.id)
+    try {
+      const res = await apiFetch(
+        `/teacher/classes/${selectedId}/assignments/${a.id}`,
+        { method: 'DELETE' },
+      )
+      if (!res.ok) {
+        setErr(parseErrorDetail(await res.json().catch(() => ({}))))
+        return
+      }
+      setBanner('Задание снято с класса')
+      await loadClassDetails(selectedId)
+      await refreshHwHistory()
+    } finally {
+      setDeletingAssignmentId(null)
+    }
+  }
+
+  const handleDeleteBlock = async (blockId) => {
+    if (!selectedId || blockId == null) return
+    const ok = window.confirm(
+      'Удалить весь блок: все задания из этого пакета и связанный прогресс учеников?',
+    )
+    if (!ok) return
+    setErr('')
+    setBanner('')
+    setDeletingBlockId(blockId)
+    try {
+      const res = await apiFetch(
+        `/teacher/classes/${selectedId}/assignment-blocks/${blockId}`,
+        { method: 'DELETE' },
+      )
+      if (!res.ok) {
+        setErr(parseErrorDetail(await res.json().catch(() => ({}))))
+        return
+      }
+      setBanner('Блок назначений удалён')
+      await loadClassDetails(selectedId)
+      await refreshHwHistory()
+    } finally {
+      setDeletingBlockId(null)
     }
   }
 
@@ -713,19 +790,56 @@ export default function TeacherCabinetPage() {
                   <h3 className="cp-teacher-h3">Назначенные задания</h3>
                   <ul className="cp-teacher-assignments">
                     {assignments.map((a) => (
-                      <li key={a.id}>
-                        <span>
-                          {a.lesson_title}
-                          {a.task_title ? ` — ${a.task_title}` : ''}
-                        </span>
-                        <span className="cp-teacher-muted">
-                          {' '}
-                          · {a.reward_coins ?? 0} мон.
-                          {a.reward_xp ? `, ${a.reward_xp} XP` : ''}
-                        </span>
-                        {a.note ? (
-                          <span className="cp-teacher-muted"> ({a.note})</span>
-                        ) : null}
+                      <li key={a.id} className="cp-teacher-assignment-row">
+                        <div className="cp-teacher-assignment-main">
+                          <span>
+                            {a.lesson_title}
+                            {a.task_title ? ` — ${a.task_title}` : ''}
+                          </span>
+                          <span className="cp-teacher-muted">
+                            {' '}
+                            · {a.reward_coins ?? 0} мон.
+                            {a.reward_xp ? `, ${a.reward_xp} XP` : ''}
+                          </span>
+                          {a.note ? (
+                            <span className="cp-teacher-muted"> ({a.note})</span>
+                          ) : null}
+                        </div>
+                        <div className="cp-teacher-assignment-actions">
+                          {a.block_id != null &&
+                            blockDeleteAnchorId.get(a.block_id) === a.id && (
+                              <button
+                                type="button"
+                                className="space-btn space-btn--outline cp-teacher-assignment-del-block"
+                                disabled={
+                                  deletingAssignmentId != null ||
+                                  deletingBlockId != null ||
+                                  pending
+                                }
+                                aria-label="Удалить весь блок заданий"
+                                onClick={() => handleDeleteBlock(a.block_id)}
+                              >
+                                {deletingBlockId === a.block_id
+                                  ? 'Удаление…'
+                                  : 'Удалить весь блок'}
+                              </button>
+                            )}
+                          <button
+                            type="button"
+                            className="space-btn space-btn--ghost cp-teacher-assignment-del"
+                            disabled={
+                              deletingAssignmentId != null ||
+                              deletingBlockId != null ||
+                              pending
+                            }
+                            aria-label="Удалить только это задание"
+                            onClick={() => handleDeleteAssignment(a)}
+                          >
+                            {deletingAssignmentId === a.id
+                              ? 'Удаление…'
+                              : 'Удалить задание'}
+                          </button>
+                        </div>
                       </li>
                     ))}
                   </ul>

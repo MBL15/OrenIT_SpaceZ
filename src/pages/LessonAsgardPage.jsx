@@ -8,6 +8,7 @@ import AsgardQuizEditorModal, {
 } from '../components/AsgardQuizEditorModal.jsx'
 import { isAdminUser } from '../auth.js'
 import { useAuth } from '../AuthContext.jsx'
+import { apiFetch, parseErrorDetail } from '../api.js'
 import {
   loadAsgardQuizSpec,
   specToQuizSteps,
@@ -16,8 +17,11 @@ import { shuffleAllQuizSteps } from '../lib/shuffleQuizOptions.js'
 import './LessonAsgardPage.css'
 
 const STORAGE_KEY = 'spaceedu-asgard-complete'
-const POINTS_KEY = 'spaceedu-points'
-const LESSON_REWARD = 100
+/** Совпадает с названием урока в БД (seed / asgard_platform). */
+const ASGARD_LESSON_TITLE = 'Основы информатики — Асгард'
+const OFFLINE_REWARD_COINS = 10
+const OFFLINE_REWARD_XP = 100
+
 const CUTSCENE_LINES = [
   {
     side: 'right',
@@ -37,23 +41,11 @@ const CUTSCENE_LINES = [
   },
 ]
 
-function readComplete() {
+function readGuestComplete() {
   try {
     return localStorage.getItem(STORAGE_KEY) === '1'
   } catch {
     return false
-  }
-}
-
-function addPoints(amount) {
-  try {
-    const current = Number(localStorage.getItem(POINTS_KEY) || '0')
-    const safeCurrent = Number.isFinite(current) ? current : 0
-    const next = safeCurrent + amount
-    localStorage.setItem(POINTS_KEY, String(next))
-    return next
-  } catch {
-    return amount
   }
 }
 
@@ -65,13 +57,16 @@ export default function LessonAsgardPage() {
   const [quizSpec, setQuizSpec] = useState(() => loadAsgardQuizSpec())
   const [quizEditorOpen, setQuizEditorOpen] = useState(false)
   const [quizEditorKey, setQuizEditorKey] = useState(0)
+  const [asgardLessonId, setAsgardLessonId] = useState(null)
 
   const openQuizEditor = () => {
     setQuizEditorKey((k) => k + 1)
     setQuizEditorOpen(true)
   }
 
-  const [completedView, setCompletedView] = useState(readComplete)
+  const [completedView, setCompletedView] = useState(() =>
+    user?.role === 'child' ? false : readGuestComplete(),
+  )
   const [questionStep, setQuestionStep] = useState(1)
   const [answers, setAnswers] = useState({})
   const [correctAnswers, setCorrectAnswers] = useState({})
@@ -79,11 +74,45 @@ export default function LessonAsgardPage() {
   const [lessonStage, setLessonStage] = useState('theory')
   const [cutsceneIndex, setCutsceneIndex] = useState(0)
   const [showCorrectModal, setShowCorrectModal] = useState(false)
-  const [lastAwardedPoints, setLastAwardedPoints] = useState(null)
+  /** Награда для модалки: с API или демо. */
+  const [rewardModal, setRewardModal] = useState(null)
   const [shuffledQuiz, setShuffledQuiz] = useState(null)
 
   const totalQuestions = quizSpec.length
   const isLastQuestion = totalQuestions > 0 && questionStep === totalQuestions
+
+  useEffect(() => {
+    let cancelled = false
+    ;(async () => {
+      const res = await apiFetch('/lessons')
+      if (!res.ok || cancelled) return
+      const list = await res.json().catch(() => [])
+      const found = Array.isArray(list)
+        ? list.find((l) => l.title === ASGARD_LESSON_TITLE)
+        : null
+      if (found?.id != null) setAsgardLessonId(found.id)
+    })()
+    return () => {
+      cancelled = true
+    }
+  }, [])
+
+  useEffect(() => {
+    if (user?.role !== 'child' || asgardLessonId == null) return undefined
+    let cancelled = false
+    ;(async () => {
+      const res = await apiFetch('/me/progress')
+      if (!res.ok || cancelled) return
+      const rows = await res.json().catch(() => [])
+      const row = Array.isArray(rows)
+        ? rows.find((r) => r.lesson_id === asgardLessonId)
+        : null
+      if (row?.theory_done) setCompletedView(true)
+    })()
+    return () => {
+      cancelled = true
+    }
+  }, [user?.role, asgardLessonId])
 
   useEffect(() => {
     if (!inCutscene || cutsceneIndex !== 0) return undefined
@@ -103,15 +132,77 @@ export default function LessonAsgardPage() {
     }
   }
 
-  const handleCorrectAnswer = () => {
-    if (!readComplete()) {
+  const handleCorrectAnswer = async () => {
+    setRewardModal(null)
+
+    if (user?.role === 'child' && asgardLessonId != null) {
+      try {
+        const res = await apiFetch(
+          `/lessons/${asgardLessonId}/theory-complete`,
+          { method: 'POST' },
+        )
+        const data = await res.json().catch(() => ({}))
+        if (res.ok) {
+          let balance = null
+          const wRes = await apiFetch('/me/wallet')
+          if (wRes.ok) {
+            const w = await wRes.json().catch(() => ({}))
+            balance = w.coins ?? w.balance ?? null
+          }
+          const xp = data.xp_awarded ?? 0
+          const coins = data.coins_awarded ?? 0
+          setRewardModal({
+            mode: 'api',
+            xp,
+            coins,
+            balance,
+            duplicate: xp === 0 && coins === 0,
+          })
+        } else if (res.status === 403) {
+          try {
+            localStorage.setItem(STORAGE_KEY, '1')
+          } catch {
+            /* ignore */
+          }
+          setRewardModal({
+            mode: 'offline',
+            xp: OFFLINE_REWARD_XP,
+            coins: OFFLINE_REWARD_COINS,
+            balance: null,
+          })
+        } else {
+          setRewardModal({
+            mode: 'error',
+            message: parseErrorDetail(data),
+          })
+        }
+      } catch {
+        try {
+          localStorage.setItem(STORAGE_KEY, '1')
+        } catch {
+          /* ignore */
+        }
+        setRewardModal({
+          mode: 'offline',
+          xp: OFFLINE_REWARD_XP,
+          coins: OFFLINE_REWARD_COINS,
+          balance: null,
+        })
+      }
+    } else {
       try {
         localStorage.setItem(STORAGE_KEY, '1')
       } catch {
         /* ignore */
       }
-      setLastAwardedPoints(addPoints(LESSON_REWARD))
+      setRewardModal({
+        mode: 'offline',
+        xp: OFFLINE_REWARD_XP,
+        coins: OFFLINE_REWARD_COINS,
+        balance: null,
+      })
     }
+
     setShowCorrectModal(true)
   }
 
@@ -169,20 +260,15 @@ export default function LessonAsgardPage() {
                     } catch {
                       /* ignore */
                     }
-                    try {
-                      localStorage.removeItem(POINTS_KEY)
-                    } catch {
-                      /* ignore */
-                    }
                     setCompletedView(false)
                     setAnswers({})
                     setCorrectAnswers({})
                     setQuestionStep(1)
                     setShowCorrectModal(false)
+                    setRewardModal(null)
                     setLessonStage('theory')
                     setInCutscene(true)
                     setCutsceneIndex(0)
-                    setLastAwardedPoints(null)
                     setShuffledQuiz(null)
                   }}
                 >
@@ -333,7 +419,7 @@ export default function LessonAsgardPage() {
                               className="asg-btn-primary"
                               onClick={() =>
                                 isLastQuestion
-                                  ? handleCorrectAnswer()
+                                  ? void handleCorrectAnswer()
                                   : setQuestionStep((s) => s + 1)
                               }
                             >
@@ -358,13 +444,39 @@ export default function LessonAsgardPage() {
       </div>
       {showCorrectModal ? (
         <div className="asg-result-backdrop" role="presentation">
-          <div className="asg-result-modal" role="dialog" aria-modal="true" aria-labelledby="asg-result-title">
+          <div
+            className="asg-result-modal"
+            role="dialog"
+            aria-modal="true"
+            aria-labelledby="asg-result-title"
+          >
             <h2 id="asg-result-title" className="asg-h2">
               Все правильно!
             </h2>
             <p className="asg-p">
-              Вы получили +{LESSON_REWARD} баллов.
-              {lastAwardedPoints != null ? ` Текущий баланс: ${lastAwardedPoints}.` : ''}
+              {rewardModal?.mode === 'error' ? (
+                <>{rewardModal.message}</>
+              ) : rewardModal?.mode === 'api' && rewardModal.duplicate ? (
+                <>
+                  Награда за этот урок уже была начислена ранее (повторное прохождение без бонуса).
+                </>
+              ) : rewardModal?.mode === 'api' ? (
+                <>
+                  Вы получили +{rewardModal.coins} мон. и +{rewardModal.xp} XP.
+                  {rewardModal.balance != null
+                    ? ` Текущий баланс: ${rewardModal.balance} мон.`
+                    : ''}
+                </>
+              ) : rewardModal?.mode === 'offline' ? (
+                <>
+                  За тест положено +{OFFLINE_REWARD_COINS} мон. и +{OFFLINE_REWARD_XP} XP.
+                  {user?.role !== 'child'
+                    ? ' Войдите как ученик, чтобы начисление сохранилось в профиле.'
+                    : ' Начисление на аккаунт недоступно (проверьте связь с сервером).'}
+                </>
+              ) : (
+                <>Завершение урока…</>
+              )}
             </p>
             <button
               type="button"

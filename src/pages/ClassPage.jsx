@@ -11,7 +11,11 @@ function normalizeName(s) {
 export default function ClassPage() {
   const { user } = useAuth()
   const [rows, setRows] = useState(null)
+  const [xpRows, setXpRows] = useState(null)
+  /** Монеты одноклассников (для списка класса); глобальный топ — в `rows` */
+  const [coinsClassRows, setCoinsClassRows] = useState(null)
   const [lbErr, setLbErr] = useState('')
+  const [xpLbErr, setXpLbErr] = useState('')
   const [activeClassId, setActiveClassId] = useState(null)
   const [myClasses, setMyClasses] = useState([])
   const [myClassesLoaded, setMyClassesLoaded] = useState(false)
@@ -66,39 +70,114 @@ export default function ClassPage() {
 
   useEffect(() => {
     if (user?.role !== 'child' || !myClassesLoaded) return
+
     if (myClasses.length === 0) {
-      setRows([])
+      let cancelled = false
+      setRows(null)
+      setXpRows([])
+      setCoinsClassRows([])
       setLbErr('')
-      return
+      setXpLbErr('')
+      ;(async () => {
+        const coinsRes = await apiFetch('/leaderboard/coins?limit=100')
+        if (cancelled) return
+        if (!coinsRes.ok) {
+          const data = await coinsRes.json().catch(() => ({}))
+          setLbErr(parseErrorDetail(data))
+          setRows([])
+        } else {
+          const data = await coinsRes.json().catch(() => null)
+          if (!Array.isArray(data)) {
+            setLbErr('Некорректный ответ сервера')
+            setRows([])
+          } else {
+            const mapped = data.map((r) => ({
+              id: r.user_id,
+              name: r.display_name || `Ученик #${r.user_id}`,
+              points: r.coins_earned_total ?? 0,
+              rank: r.rank,
+            }))
+            setRows(mapped)
+          }
+        }
+      })()
+      return () => {
+        cancelled = true
+      }
     }
+
     if (activeClassId == null) return
     let cancelled = false
     setRows(null)
+    setXpRows(null)
+    setCoinsClassRows(null)
     setLbErr('')
+    setXpLbErr('')
     ;(async () => {
-      const res = await apiFetch(`/leaderboard/class/${activeClassId}`)
+      const [coinsGlobalRes, xpRes, coinsClassRes] = await Promise.all([
+        apiFetch('/leaderboard/coins?limit=100'),
+        apiFetch(`/leaderboard/class/${activeClassId}`),
+        apiFetch(`/leaderboard/coins/class/${activeClassId}?limit=200`),
+      ])
       if (cancelled) return
-      if (!res.ok) {
-        const data = await res.json().catch(() => ({}))
+
+      if (!coinsGlobalRes.ok) {
+        const data = await coinsGlobalRes.json().catch(() => ({}))
         setLbErr(parseErrorDetail(data))
         setRows([])
-        return
+      } else {
+        const data = await coinsGlobalRes.json().catch(() => null)
+        if (!Array.isArray(data)) {
+          setLbErr('Некорректный ответ сервера')
+          setRows([])
+        } else {
+          const mapped = data.map((r) => ({
+            id: r.user_id,
+            name: r.display_name || `Ученик #${r.user_id}`,
+            points: r.coins_earned_total ?? 0,
+            rank: r.rank,
+          }))
+          setRows(mapped)
+        }
       }
-      const data = await res.json().catch(() => null)
-      if (!Array.isArray(data)) {
-        setLbErr('Некорректный ответ сервера')
-        setRows([])
-        return
+
+      if (!coinsClassRes.ok) {
+        setCoinsClassRows([])
+      } else {
+        const data = await coinsClassRes.json().catch(() => null)
+        if (!Array.isArray(data)) {
+          setCoinsClassRows([])
+        } else {
+          setCoinsClassRows(
+            data.map((r) => ({
+              id: r.user_id,
+              points: r.coins_earned_total ?? 0,
+            })),
+          )
+        }
       }
-      const mapped = data.map((r) => ({
-        id: r.user_id,
-        name: r.display_name || `Ученик #${r.user_id}`,
-        points: r.xp ?? 0,
-        level: typeof r.level === 'number' ? r.level : 1,
-        role: null,
-        rank: r.rank,
-      }))
-      setRows(mapped)
+
+      if (!xpRes.ok) {
+        const data = await xpRes.json().catch(() => ({}))
+        setXpLbErr(parseErrorDetail(data))
+        setXpRows([])
+      } else {
+        const data = await xpRes.json().catch(() => null)
+        if (!Array.isArray(data)) {
+          setXpLbErr('Некорректный ответ сервера')
+          setXpRows([])
+        } else {
+          const mapped = data.map((r) => ({
+            id: r.user_id,
+            name: r.display_name || `Ученик #${r.user_id}`,
+            points: r.xp ?? 0,
+            level: typeof r.level === 'number' ? r.level : 1,
+            role: null,
+            rank: r.rank,
+          }))
+          setXpRows(mapped)
+        }
+      }
     })()
     return () => {
       cancelled = true
@@ -168,12 +247,40 @@ export default function ClassPage() {
     })
   }, [rows, meId, meName])
 
-  const leaderboard = useMemo(() => [...merged], [merged])
+  const mergedXp = useMemo(() => {
+    const list = xpRows || []
+    return list.map((m) => {
+      const isMe =
+        (meId != null && m.id === meId) ||
+        (meName && normalizeName(m.name) === meName)
+      return { ...m, isMe }
+    })
+  }, [xpRows, meId, meName])
 
-  const classList = useMemo(
-    () => [...merged].sort((a, b) => a.name.localeCompare(b.name, 'ru')),
-    [merged],
-  )
+  const coinsByClassmateId = useMemo(() => {
+    const m = new Map()
+    for (const r of coinsClassRows || []) {
+      m.set(r.id, r.points)
+    }
+    return m
+  }, [coinsClassRows])
+
+  const leaderboard = useMemo(() => [...merged], [merged])
+  const leaderboardXp = useMemo(() => [...mergedXp], [mergedXp])
+
+  const classList = useMemo(() => {
+    const sorted = [...mergedXp].sort((a, b) =>
+      a.name.localeCompare(b.name, 'ru'),
+    )
+    return sorted.map((row) => ({
+      id: row.id,
+      name: row.name,
+      level: row.level,
+      points: coinsByClassmateId.get(row.id) ?? 0,
+      xpTotal: row.points,
+      isMe: row.isMe,
+    }))
+  }, [mergedXp, coinsByClassmateId])
 
   const activeClassName =
     myClasses.find((c) => c.class_id === activeClassId)?.class_name ?? ''
@@ -220,7 +327,10 @@ export default function ClassPage() {
   const bootPending =
     user?.role === 'child' &&
     (!myClassesLoaded ||
-      (myClasses.length > 0 && activeClassId != null && rows === null))
+      rows === null ||
+      (myClasses.length > 0 &&
+        activeClassId != null &&
+        (xpRows === null || coinsClassRows === null)))
 
   if (bootPending) {
     return (
@@ -236,10 +346,10 @@ export default function ClassPage() {
 
   const lbSubtitle =
     myClasses.length === 0
-      ? 'Вступите в класс по коду учителя, чтобы открыть лидерборд по уровню опыта среди одноклассников.'
+      ? 'Лидерборд по монетам — среди всех учеников платформы. Вступите в класс по коду учителя, чтобы видеть XP и список одноклассников.'
       : activeClassName
-        ? `Класс «${activeClassName}»: рейтинг по уровню опыта (из суммарного XP); при равном уровне выше тот, у кого больше XP.`
-        : 'Лидерборд по уровню опыта только среди учеников вашего класса.'
+        ? `Класс «${activeClassName}»: монеты — общий рейтинг платформы; XP и список класса — среди одноклассников.`
+        : 'Монеты — по всей платформе; XP и список — по выбранному классу.'
 
   return (
     <div className="cp-wrap">
@@ -254,7 +364,7 @@ export default function ClassPage() {
             {myClasses.length > 1 && activeClassId != null && (
               <div className="cp-class-picker">
                 <label>
-                  Класс для лидерборда по уровню опыта
+                  Класс (XP и список)
                   <select
                     value={activeClassId}
                     onChange={(e) =>
@@ -273,7 +383,8 @@ export default function ClassPage() {
           </div>
           <div className="cp-meta">
             <span className="cp-badge">
-              В лидерборде по опыту: {merged.length}
+              Место по монетам (платформа):{' '}
+              {merged.find((r) => r.isMe)?.rank ?? '—'}
             </span>
           </div>
         </header>
@@ -393,93 +504,164 @@ export default function ClassPage() {
         )}
 
         <div className="cp-main">
-          <section
-            className="cp-section"
-            aria-labelledby="cp-lb-title"
-          >
-            <div className="cp-section-head">
-              <h2 id="cp-lb-title" className="cp-section-title">
-                Лидерборд по уровню опыта
-              </h2>
-              <p className="cp-section-hint">
-                Уровень считается от суммарного XP на платформе; при равенстве
-                уровня выше стоят одноклассники с большим XP.
-              </p>
-            </div>
-            <div className="cp-section-body">
-              {lbErr ? (
-                <p className="space-form-error" style={{ margin: '12px 18px' }}>
-                  {lbErr}
+          <section className="cp-section" aria-labelledby="cp-lb-title">
+              <div className="cp-section-head">
+                <h2 id="cp-lb-title" className="cp-section-title">
+                  Лидерборд по монетам
+                </h2>
+                <p className="cp-section-hint">
+                  Заработанные монеты за всё время среди всех учеников платформы
+                  (топ по сумме начислений).
                 </p>
-              ) : null}
-              {!lbErr && leaderboard.length === 0 && myClasses.length > 0 ? (
-                <p className="cp-section-hint" style={{ padding: '12px 18px' }}>
-                  Пока нет одноклассников с прогрессом — список обновится, когда
-                  ученики вступят в класс.
-                </p>
-              ) : null}
-              {!lbErr && myClasses.length === 0 ? (
-                <p className="cp-section-hint" style={{ padding: '12px 18px' }}>
-                  После вступления в класс здесь появится лидерборд по уровню опыта.
-                </p>
-              ) : null}
-              {leaderboard.length > 0 ? (
-                <div className="cp-lb-header" aria-hidden>
-                  <span>Место</span>
-                  <span>Ученик</span>
-                  <span>Уровень и XP</span>
-                </div>
-              ) : null}
-              {leaderboard.map((row, i) => {
-                const rank = row.rank ?? i + 1
-                const rankClass =
-                  rank === 1
-                    ? 'cp-rank--1'
-                    : rank === 2
-                      ? 'cp-rank--2'
-                      : rank === 3
-                        ? 'cp-rank--3'
-                        : ''
-                const barScore = row.level * 1_000_000 + row.points
-                const maxBar = Math.max(
-                  1,
-                  ...leaderboard.map((r) => r.level * 1_000_000 + r.points),
-                )
-                const pct = Math.round((barScore / maxBar) * 100)
-                return (
-                  <div
-                    key={`${row.id}-${i}`}
-                    className={`cp-lb-row${row.isMe ? ' cp-lb-row--me' : ''}`}
-                  >
-                    <div className={`cp-rank ${rankClass}`}>{rank}</div>
-                    <div>
-                      <div className="cp-lb-name">
-                        {row.name}
-                        {row.isMe && (
-                          <span className="cp-badge" style={{ marginLeft: 8 }}>
-                            Вы
-                          </span>
-                        )}
-                      </div>
-                      <div
-                        className="cp-bar"
-                        aria-hidden
-                        title="Доля от максимума «уровень + XP» в классе"
-                      >
-                        <div
-                          className="cp-bar-fill"
-                          style={{ width: `${pct}%` }}
-                        />
-                      </div>
-                    </div>
-                    <div className="cp-lb-points">
-                      <span className="cp-lb-level">Ур. {row.level}</span>
-                      <span className="cp-lb-xp">{row.points} XP</span>
-                    </div>
+              </div>
+              <div className="cp-section-body">
+                {lbErr ? (
+                  <p className="space-form-error" style={{ margin: '12px 18px' }}>
+                    {lbErr}
+                  </p>
+                ) : null}
+                {!lbErr && leaderboard.length === 0 ? (
+                  <p className="cp-section-hint" style={{ padding: '12px 18px' }}>
+                    Пока нет данных по заработанным монетам.
+                  </p>
+                ) : null}
+                {leaderboard.length > 0 ? (
+                  <div className="cp-lb-header" aria-hidden>
+                    <span>Место</span>
+                    <span>Ученик</span>
+                    <span>Монеты</span>
                   </div>
-                )
-              })}
-            </div>
+                ) : null}
+                {leaderboard.map((row, i) => {
+                  const rank = row.rank ?? i + 1
+                  const rankClass =
+                    rank === 1
+                      ? 'cp-rank--1'
+                      : rank === 2
+                        ? 'cp-rank--2'
+                        : rank === 3
+                          ? 'cp-rank--3'
+                          : ''
+                  const maxBar = Math.max(1, ...leaderboard.map((r) => r.points))
+                  const pct = Math.round((row.points / maxBar) * 100)
+                  return (
+                    <div
+                      key={`coin-${row.id}-${i}`}
+                      className={`cp-lb-row${row.isMe ? ' cp-lb-row--me' : ''}`}
+                    >
+                      <div className={`cp-rank ${rankClass}`}>{rank}</div>
+                      <div>
+                        <div className="cp-lb-name">
+                          {row.name}
+                          {row.isMe && (
+                            <span className="cp-badge" style={{ marginLeft: 8 }}>
+                              Вы
+                            </span>
+                          )}
+                        </div>
+                        <div
+                          className="cp-bar"
+                          aria-hidden
+                          title="Доля от максимума монет среди учеников платформы (в топе)"
+                        >
+                          <div
+                            className="cp-bar-fill"
+                            style={{ width: `${pct}%` }}
+                          />
+                        </div>
+                      </div>
+                      <div className="cp-lb-points cp-lb-points--coins-only">
+                        <span className="cp-lb-xp">{row.points} мон.</span>
+                      </div>
+                    </div>
+                  )
+                })}
+              </div>
+          </section>
+
+          <section className="cp-section" aria-labelledby="cp-lb-xp-title">
+              <div className="cp-section-head">
+                <h2 id="cp-lb-xp-title" className="cp-section-title">
+                  Лидерборд по XP
+                </h2>
+                <p className="cp-section-hint">
+                  Суммарный опыт на платформе; при равном уровне выше тот, у кого больше
+                  XP.
+                </p>
+              </div>
+              <div className="cp-section-body">
+                {xpLbErr ? (
+                  <p className="space-form-error" style={{ margin: '12px 18px' }}>
+                    {xpLbErr}
+                  </p>
+                ) : null}
+                {!xpLbErr && leaderboardXp.length === 0 && myClasses.length > 0 ? (
+                  <p className="cp-section-hint" style={{ padding: '12px 18px' }}>
+                    Пока нет данных по XP для класса.
+                  </p>
+                ) : null}
+                {!xpLbErr && myClasses.length === 0 ? (
+                  <p className="cp-section-hint" style={{ padding: '12px 18px' }}>
+                    После вступления в класс здесь появится лидерборд по XP.
+                  </p>
+                ) : null}
+                {leaderboardXp.length > 0 ? (
+                  <div className="cp-lb-header" aria-hidden>
+                    <span>Место</span>
+                    <span>Ученик</span>
+                    <span>Уровень и XP</span>
+                  </div>
+                ) : null}
+                {leaderboardXp.map((row, i) => {
+                  const rank = row.rank ?? i + 1
+                  const rankClass =
+                    rank === 1
+                      ? 'cp-rank--1'
+                      : rank === 2
+                        ? 'cp-rank--2'
+                        : rank === 3
+                          ? 'cp-rank--3'
+                          : ''
+                  const barScore = row.level * 1_000_000 + row.points
+                  const maxBar = Math.max(
+                    1,
+                    ...leaderboardXp.map((r) => r.level * 1_000_000 + r.points),
+                  )
+                  const pct = Math.round((barScore / maxBar) * 100)
+                  return (
+                    <div
+                      key={`xp-${row.id}-${i}`}
+                      className={`cp-lb-row${row.isMe ? ' cp-lb-row--me' : ''}`}
+                    >
+                      <div className={`cp-rank ${rankClass}`}>{rank}</div>
+                      <div>
+                        <div className="cp-lb-name">
+                          {row.name}
+                          {row.isMe && (
+                            <span className="cp-badge" style={{ marginLeft: 8 }}>
+                              Вы
+                            </span>
+                          )}
+                        </div>
+                        <div
+                          className="cp-bar cp-bar--xp"
+                          aria-hidden
+                          title="Доля от максимума «уровень + XP» в классе"
+                        >
+                          <div
+                            className="cp-bar-fill cp-bar-fill--xp"
+                            style={{ width: `${pct}%` }}
+                          />
+                        </div>
+                      </div>
+                      <div className="cp-lb-points">
+                        <span className="cp-lb-level">Ур. {row.level}</span>
+                        <span className="cp-lb-xp">{row.points} XP</span>
+                      </div>
+                    </div>
+                  )
+                })}
+              </div>
           </section>
 
           <section className="cp-section" aria-labelledby="cp-class-title">
@@ -487,7 +669,9 @@ export default function ClassPage() {
               <h2 id="cp-class-title" className="cp-section-title">
                 Список класса
               </h2>
-              <p className="cp-section-hint">По алфавиту · те же одноклассники</p>
+              <p className="cp-section-hint">
+                По алфавиту · монеты и XP как в соседних колонках
+              </p>
             </div>
             <div className="cp-section-body">
               {classList.length === 0 && myClasses.length > 0 ? (
@@ -509,9 +693,10 @@ export default function ClassPage() {
                   </div>
                   <div className="cp-class-pts">
                     <span className="cp-class-lv">Ур. {row.level}</span>
-                    <span className="cp-class-xp">{row.points} XP</span>
+                    <span className="cp-class-xp">{row.points} мон.</span>
+                    <span className="cp-class-xp-total">{row.xpTotal} XP</span>
                     {row.isMe ? (
-                      <span className="cp-badge" style={{ marginTop: 4 }}>
+                      <span className="cp-badge" style={{ marginLeft: 8 }}>
                         Вы
                       </span>
                     ) : null}
