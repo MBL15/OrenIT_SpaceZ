@@ -33,6 +33,14 @@ class UserPublic(BaseModel):
     display_name: str
     role: str
     avatar_id: str | None = None
+    xp_total: int | None = Field(
+        default=None,
+        description="Суммарный XP (только для ученика)",
+    )
+    level: int | None = Field(
+        default=None,
+        description="Уровень от суммарного XP (только для ученика)",
+    )
 
 
 class ParentVerifyBody(BaseModel):

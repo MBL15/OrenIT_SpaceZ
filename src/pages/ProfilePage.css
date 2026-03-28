@@ -66,6 +66,55 @@
   order: 0;
 }
 
+.pf-progress {
+  width: 100%;
+  max-width: 320px;
+  margin: 0 0 18px;
+  padding: 14px 16px;
+  border-radius: 14px;
+  border: 1px solid rgba(76, 175, 80, 0.35);
+  background: linear-gradient(180deg, #f8fff7 0%, #eef6ec 100%);
+  text-align: left;
+  box-sizing: border-box;
+}
+
+.pf-progress-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.pf-progress-row--secondary {
+  margin-top: 8px;
+  padding-top: 8px;
+  border-top: 1px dashed rgba(76, 175, 80, 0.25);
+}
+
+.pf-progress-label {
+  font-size: 13px;
+  font-weight: 700;
+  color: #2e7d32;
+}
+
+.pf-progress-value {
+  min-width: 40px;
+  text-align: center;
+  padding: 6px 12px;
+  border-radius: 10px;
+  background: var(--pf-green);
+  color: #fff;
+  font-size: 16px;
+  line-height: 1;
+}
+
+.pf-progress-xp {
+  font-size: 14px;
+  font-weight: 700;
+  color: var(--pf-green-dark);
+  font-variant-numeric: tabular-nums;
+}
+
 .pf-coins {
   display: inline-flex;
   align-items: center;

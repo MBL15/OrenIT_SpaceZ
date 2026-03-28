@@ -16,9 +16,9 @@ from app.access import (
     verify_password,
 )
 from app.core import get_db, get_settings
-from app.models import ParentChallenge, ParentViewAudit, User
+from app.models import ParentChallenge, ParentViewAudit, User, UserStat
 from app.schemas import LoginBody, ParentVerifyBody, RegisterBody, TokenResponse, UserPublic
-from app.services import ensure_user_economy_rows
+from app.services import ensure_user_economy_rows, level_from_total_xp
 
 settings = get_settings()
 
@@ -27,7 +27,7 @@ parent_router = APIRouter(prefix="/parent-gate", tags=["parent-gate"])
 
 
 @auth_router.post("/register", response_model=UserPublic)
-def register(body: RegisterBody, db: Annotated[Session, Depends(get_db)]) -> User:
+def register(body: RegisterBody, db: Annotated[Session, Depends(get_db)]) -> UserPublic:
     if db.query(User).filter(User.login == body.login).first():
         raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail="Login taken")
     ts = datetime.now(timezone.utc).replace(microsecond=0).isoformat()
@@ -46,7 +46,7 @@ def register(body: RegisterBody, db: Annotated[Session, Depends(get_db)]) -> Use
     if role == "child":
         ensure_user_economy_rows(db, user.id)
         db.commit()
-    return user
+    return me(user, db)
 
 
 @auth_router.post("/login", response_model=TokenResponse)
@@ -62,8 +62,25 @@ def login(body: LoginBody, db: Annotated[Session, Depends(get_db)]) -> TokenResp
 
 
 @auth_router.get("/me", response_model=UserPublic)
-def me(user: Annotated[User, Depends(get_current_user)]) -> User:
-    return user
+def me(
+    user: Annotated[User, Depends(get_current_user)],
+    db: Annotated[Session, Depends(get_db)],
+) -> UserPublic:
+    xp_total: int | None = None
+    level: int | None = None
+    if user.role == "child":
+        st = db.get(UserStat, user.id)
+        xp_total = st.score_total if st else 0
+        level = level_from_total_xp(xp_total)
+    return UserPublic(
+        id=user.id,
+        login=user.login,
+        display_name=user.display_name,
+        role=user.role,
+        avatar_id=user.avatar_id,
+        xp_total=xp_total,
+        level=level,
+    )
 
 
 class ChallengeResponse(BaseModel):

@@ -115,6 +115,25 @@
 }
 
 /* Leaderboard */
+.cp-lb-header {
+  display: grid;
+  grid-template-columns: 44px 1fr auto;
+  align-items: center;
+  gap: 12px;
+  padding: 8px 18px 6px;
+  font-size: 11px;
+  font-weight: 800;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: #558b2f;
+  border-bottom: 1px solid var(--cp-border);
+  background: rgba(76, 175, 80, 0.06);
+}
+
+.cp-lb-header span:last-child {
+  text-align: right;
+}
+
 .cp-lb-row {
   display: grid;
   grid-template-columns: 44px 1fr auto;
@@ -167,10 +186,26 @@
 }
 
 .cp-lb-points {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  gap: 2px;
   font-weight: 800;
   font-size: 14px;
   color: var(--cp-green-dark);
   font-variant-numeric: tabular-nums;
+}
+
+.cp-lb-level {
+  font-size: 15px;
+  line-height: 1.2;
+}
+
+.cp-lb-xp {
+  font-size: 11px;
+  font-weight: 600;
+  color: #558b2f;
+  opacity: 0.92;
 }
 
 .cp-bar {
@@ -253,10 +288,50 @@
 }
 
 .cp-class-pts {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  gap: 2px;
   font-size: 13px;
   font-weight: 600;
   color: var(--cp-green-dark);
   font-variant-numeric: tabular-nums;
+}
+
+.cp-class-lv {
+  font-weight: 800;
+  font-size: 14px;
+}
+
+.cp-class-xp {
+  font-size: 12px;
+  font-weight: 600;
+  color: #558b2f;
+}
+
+.cp-class-picker {
+  margin-top: 10px;
+}
+
+.cp-class-picker label {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  font-size: 12px;
+  font-weight: 700;
+  color: #2e7d32;
+}
+
+.cp-class-picker select {
+  min-width: 220px;
+  max-width: 100%;
+  padding: 8px 12px;
+  border-radius: 10px;
+  border: 1px solid var(--cp-border);
+  font-family: inherit;
+  font-size: 14px;
+  color: var(--cp-green-dark);
+  background: #fafafa;
 }
 
 /* Вступление по коду: превью и шаги */

@@ -286,6 +286,41 @@ def leaderboard(
     return out
 
 
+@play_router.get("/leaderboard/class/{class_id}", response_model=list[LeaderRow])
+def leaderboard_for_class(
+    class_id: int,
+    db: Annotated[Session, Depends(get_db)],
+    user: Annotated[User, Depends(get_current_user)],
+) -> list[LeaderRow]:
+    """Ученики одного класса: сортировка по уровню (и при равенстве — по суммарному XP)."""
+    _assert_class_coins_leaderboard_access(db, user, class_id)
+    rows = (
+        db.query(User, UserStat)
+        .join(ClassMember, ClassMember.user_id == User.id)
+        .outerjoin(UserStat, UserStat.user_id == User.id)
+        .filter(ClassMember.class_id == class_id, User.role == "child")
+        .all()
+    )
+    enriched: list[tuple[User, int, int]] = []
+    for u, st in rows:
+        xp = st.score_total if st else 0
+        enriched.append((u, xp, level_from_total_xp(xp)))
+    enriched.sort(key=lambda t: (-t[2], -t[1], t[0].id))
+    out: list[LeaderRow] = []
+    for i, (u, xp, lv) in enumerate(enriched, start=1):
+        out.append(
+            LeaderRow(
+                rank=i,
+                user_id=u.id,
+                display_name=u.display_name,
+                avatar_id=u.avatar_id,
+                xp=xp,
+                level=lv,
+            )
+        )
+    return out
+
+
 @play_router.get("/leaderboard/coins", response_model=list[CoinsLeaderRow])
 def leaderboard_coins_global(
     db: Annotated[Session, Depends(get_db)],

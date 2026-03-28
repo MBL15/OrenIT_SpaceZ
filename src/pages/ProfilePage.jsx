@@ -10,6 +10,7 @@ export default function ProfilePage() {
   const { user } = useAuth()
   const [shopOpen, setShopOpen] = useState(false)
   const [balance, setBalance] = useState(null)
+  const [progress, setProgress] = useState(null)
   const { src: artemiySrc, className: artemiySkinClass, refresh: refreshSkin } =
     useArtemiySkin()
 
@@ -35,7 +36,10 @@ export default function ProfilePage() {
     let cancelled = false
     ;(async () => {
       if (!user || user.role !== 'child') {
-        if (!cancelled) setBalance(null)
+        if (!cancelled) {
+          setBalance(null)
+          setProgress(null)
+        }
         return
       }
       const res = await apiFetch('/me/wallet')
@@ -53,6 +57,27 @@ export default function ProfilePage() {
     }
   }, [user])
 
+  useEffect(() => {
+    let cancelled = false
+    ;(async () => {
+      if (!user || user.role !== 'child') {
+        if (!cancelled) setProgress(null)
+        return
+      }
+      const res = await apiFetch('/auth/me')
+      if (cancelled || !res.ok) return
+      const u = await res.json().catch(() => null)
+      if (cancelled || !u) return
+      const lv = typeof u.level === 'number' ? u.level : null
+      const xp = typeof u.xp_total === 'number' ? u.xp_total : null
+      if (lv != null && xp != null) setProgress({ level: lv, xp_total: xp })
+      else setProgress(null)
+    })()
+    return () => {
+      cancelled = true
+    }
+  }, [user])
+
   return (
     <div className="pf-wrap">
       <div className="pf-panel">
@@ -64,6 +89,18 @@ export default function ProfilePage() {
 
         <main className="pf-main">
           <h1 className="pf-username">{displayName}</h1>
+          {user?.role === 'child' && progress && (
+            <div className="pf-progress" aria-label="Уровень и опыт">
+              <div className="pf-progress-row">
+                <span className="pf-progress-label">Уровень</span>
+                <strong className="pf-progress-value">{progress.level}</strong>
+              </div>
+              <div className="pf-progress-row pf-progress-row--secondary">
+                <span className="pf-progress-label">Всего XP</span>
+                <span className="pf-progress-xp">{progress.xp_total}</span>
+              </div>
+            </div>
+          )}
           {user?.role === 'child' && balance !== null && (
             <div className="pf-coins" aria-label="Баланс коинов">
               <span className="pf-coins-label">Монеты</span>
@@ -113,6 +150,15 @@ export default function ProfilePage() {
         onEconomyUpdated={() => {
           void loadWallet()
           void refreshSkin()
+          void (async () => {
+            const res = await apiFetch('/auth/me')
+            if (!res.ok) return
+            const u = await res.json().catch(() => null)
+            if (!u) return
+            const lv = typeof u.level === 'number' ? u.level : null
+            const xp = typeof u.xp_total === 'number' ? u.xp_total : null
+            if (lv != null && xp != null) setProgress({ level: lv, xp_total: xp })
+          })()
         }}
       />
     </div>

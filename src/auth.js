@@ -18,6 +18,8 @@ export function normalizeUser(u) {
     display_name: u.display_name,
     role: u.role,
     avatar_id: u.avatar_id,
+    xp_total: u.xp_total ?? null,
+    level: u.level ?? null,
     name: u.display_name,
     email: u.login,
   }
