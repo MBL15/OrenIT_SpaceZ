@@ -53,6 +53,10 @@ from app.services import (
     recompute_lesson_practice_done,
     render_prompt,
     sample_params,
+    task_payload_dragdrop_for_client,
+    task_payload_terminal_for_client,
+    verify_dragdrop_mapping,
+    verify_terminal_io_outputs,
     wrong_attempts_for_lesson,
 )
 
@@ -708,9 +712,16 @@ class StartPracticeResponse(BaseModel):
     notice: str | None = None
     ui_mode: str | None = Field(
         default=None,
-        description="asgard_mc — варианты ответа как в уроке Асгард; иначе ввод текста",
+        description=(
+            "asgard_mc — варианты; terminal_io — Python stdin/stdout; dragdrop — перетаскивание; "
+            "иначе текстовый ответ"
+        ),
     )
     choices: list[PracticeChoiceOut] | None = None
+    task_payload: dict | None = Field(
+        default=None,
+        description="Данные для UI (без секретов эталона для terminal_io)",
+    )
 
 
 class SubmitPracticeResponse(BaseModel):
@@ -799,41 +810,60 @@ def start_practice(
             )
         link_assignment_id = asn.id
 
-    spec = parse_param_spec(tmpl.param_spec_json)
-    params = sample_params(spec)
     checker_cfg = parse_checker_config(tmpl.checker_config_json)
-    expected = compute_expected(params, tmpl.checker_type, checker_cfg)
-    prompt = render_prompt(tmpl.prompt_template, params)
+    ui_kind = checker_cfg.get("kind")
+    task_payload: dict | None = None
 
-    choices_response: list[PracticeChoiceOut] | None = None
-    ui_mode: str | None = None
-    if checker_cfg.get("kind") == "choice":
-        raw_choices = checker_cfg.get("choices")
-        if not isinstance(raw_choices, list) or len(raw_choices) < 2:
-            raise HTTPException(
-                status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-                detail="Некорректная конфигурация задания",
-            )
-        built: list[PracticeChoiceOut] = []
-        seen_ids: list[str] = []
-        for c in raw_choices:
-            if not isinstance(c, dict):
-                continue
-            cid = str(c.get("id", "")).strip()
-            txt = str(c.get("text", "")).strip()
-            if not cid or not txt:
-                continue
-            built.append(PracticeChoiceOut(choice_id=cid, text=txt))
-            seen_ids.append(cid)
-        exp_c = str(checker_cfg.get("expected_choice_id", "")).strip()
-        if exp_c not in seen_ids or len(built) < 2:
-            raise HTTPException(
-                status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-                detail="Некорректная конфигурация задания",
-            )
-        random.shuffle(built)
-        choices_response = built
-        ui_mode = "asgard_mc"
+    if ui_kind == "terminal_io":
+        params = {}
+        expected = "__TERMINAL_IO__"
+        prompt = (tmpl.prompt_template or "").strip() or str(checker_cfg.get("story") or "Решите задачу.")
+        choices_response: list[PracticeChoiceOut] | None = None
+        ui_mode = "terminal_io"
+        task_payload = task_payload_terminal_for_client(checker_cfg)
+    elif ui_kind == "dragdrop":
+        params = {}
+        sol = checker_cfg.get("solution") if isinstance(checker_cfg.get("solution"), dict) else {}
+        expected = json.dumps(sol, ensure_ascii=False, sort_keys=True)
+        prompt = (tmpl.prompt_template or "").strip() or str(checker_cfg.get("instruction") or "Задание")
+        choices_response = None
+        ui_mode = "dragdrop"
+        task_payload = task_payload_dragdrop_for_client(checker_cfg)
+    else:
+        spec = parse_param_spec(tmpl.param_spec_json)
+        params = sample_params(spec)
+        expected = compute_expected(params, tmpl.checker_type, checker_cfg)
+        prompt = render_prompt(tmpl.prompt_template, params)
+
+        choices_response = None
+        ui_mode = None
+        if checker_cfg.get("kind") == "choice":
+            raw_choices = checker_cfg.get("choices")
+            if not isinstance(raw_choices, list) or len(raw_choices) < 2:
+                raise HTTPException(
+                    status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+                    detail="Некорректная конфигурация задания",
+                )
+            built: list[PracticeChoiceOut] = []
+            seen_ids: list[str] = []
+            for c in raw_choices:
+                if not isinstance(c, dict):
+                    continue
+                cid = str(c.get("id", "")).strip()
+                txt = str(c.get("text", "")).strip()
+                if not cid or not txt:
+                    continue
+                built.append(PracticeChoiceOut(choice_id=cid, text=txt))
+                seen_ids.append(cid)
+            exp_c = str(checker_cfg.get("expected_choice_id", "")).strip()
+            if exp_c not in seen_ids or len(built) < 2:
+                raise HTTPException(
+                    status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+                    detail="Некорректная конфигурация задания",
+                )
+            random.shuffle(built)
+            choices_response = built
+            ui_mode = "asgard_mc"
 
     repeat_without = False
     start_notice: str | None = None
@@ -872,6 +902,7 @@ def start_practice(
         notice=start_notice,
         ui_mode=ui_mode,
         choices=choices_response,
+        task_payload=task_payload,
     )
 
 
@@ -897,7 +928,11 @@ def submit_practice(
 
     cfg = parse_checker_config(tmpl.checker_config_json)
     tolerance = float(cfg.get("tolerance", 0))
-    if cfg.get("kind") == "choice":
+    if cfg.get("kind") == "terminal_io":
+        correct = verify_terminal_io_outputs(cfg, body.terminal_outputs)
+    elif cfg.get("kind") == "dragdrop":
+        correct = verify_dragdrop_mapping(cfg, body.dragdrop_mapping)
+    elif cfg.get("kind") == "choice":
         correct = inst.expected_answer.strip() == body.answer.strip()
     else:
         correct = answers_match(inst.expected_answer, body.answer, tolerance)
@@ -966,10 +1001,19 @@ def submit_practice(
                 xp_from_task += 5
         currency_on_attempt = coins_awarded
 
+    if cfg.get("kind") == "terminal_io":
+        ans_log = json.dumps(body.terminal_outputs or [], ensure_ascii=False)
+    elif cfg.get("kind") == "dragdrop":
+        ans_log = json.dumps(body.dragdrop_mapping or {}, ensure_ascii=False)
+    else:
+        ans_log = body.answer.strip()
+    if len(ans_log) > 256:
+        ans_log = ans_log[:253] + "..."
+
     attempt = TaskAttempt(
         task_instance_id=inst.id,
         user_id=user.id,
-        answer_submitted=body.answer.strip(),
+        answer_submitted=ans_log,
         is_correct=correct,
         started_at=body.started_at,
         submitted_at=_now_iso(),

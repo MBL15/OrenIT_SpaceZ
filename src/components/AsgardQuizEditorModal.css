@@ -9,6 +9,11 @@
   padding: 24px 16px;
   box-sizing: border-box;
   overflow-y: auto;
+  animation: dlg-backdrop-in var(--dlg-enter-backdrop-dur) var(--dlg-ease-backdrop);
+}
+
+.asg-edit-backdrop--exit {
+  animation: dlg-backdrop-out 0.22s ease forwards;
 }
 
 .asg-edit-modal {
@@ -23,6 +28,20 @@
   max-height: calc(100svh - 48px);
   display: flex;
   flex-direction: column;
+  animation: dlg-modal-pop-in var(--dlg-enter-modal-dur) var(--dlg-ease-modal);
+}
+
+.asg-edit-modal--exit {
+  animation: dlg-modal-pop-out 0.22s ease forwards;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .asg-edit-backdrop,
+  .asg-edit-backdrop--exit,
+  .asg-edit-modal,
+  .asg-edit-modal--exit {
+    animation-duration: 0.01ms !important;
+  }
 }
 
 .asg-edit-head {

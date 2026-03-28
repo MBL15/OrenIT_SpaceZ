@@ -1,0 +1,47 @@
+/* Общие тайминги появления диалогов (плавное замедление в конце) */
+:root {
+  --dlg-enter-backdrop-dur: 0.45s;
+  --dlg-enter-modal-dur: 0.52s;
+  --dlg-ease-backdrop: cubic-bezier(0.33, 1, 0.68, 1);
+  --dlg-ease-modal: cubic-bezier(0.22, 1, 0.36, 1);
+}
+
+@keyframes dlg-backdrop-in {
+  from {
+    opacity: 0;
+  }
+  to {
+    opacity: 1;
+  }
+}
+
+@keyframes dlg-backdrop-out {
+  from {
+    opacity: 1;
+  }
+  to {
+    opacity: 0;
+  }
+}
+
+@keyframes dlg-modal-pop-in {
+  from {
+    opacity: 0;
+    transform: translateY(18px) scale(0.985);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0) scale(1);
+  }
+}
+
+@keyframes dlg-modal-pop-out {
+  from {
+    opacity: 1;
+    transform: translateY(0) scale(1);
+  }
+  to {
+    opacity: 0;
+    transform: translateY(8px) scale(0.98);
+  }
+}

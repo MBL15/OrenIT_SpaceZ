@@ -94,6 +94,70 @@ def answers_match(expected: str, submitted: str, tolerance: float) -> bool:
     return abs(exp - got) <= tolerance
 
 
+def normalize_stdout(s: str | None) -> str:
+    if s is None:
+        return ""
+    return str(s).strip().replace("\r\n", "\n")
+
+
+def verify_terminal_io_outputs(checker_cfg: dict[str, Any], outputs: list[str] | None) -> bool:
+    """Сравнивает вывод ученика с эталоном по каждому тесту (порядок как в tests)."""
+    if not outputs or not isinstance(outputs, list):
+        return False
+    tests = checker_cfg.get("tests")
+    if not isinstance(tests, list) or len(tests) == 0:
+        return False
+    if len(outputs) != len(tests):
+        return False
+    for i, t in enumerate(tests):
+        if not isinstance(t, dict):
+            return False
+        exp = normalize_stdout(str(t.get("expected_stdout", "")))
+        got = normalize_stdout(str(outputs[i]) if i < len(outputs) else "")
+        if exp != got:
+            return False
+    return True
+
+
+def verify_dragdrop_mapping(checker_cfg: dict[str, Any], mapping: dict[str, str] | None) -> bool:
+    sol = checker_cfg.get("solution")
+    if not isinstance(sol, dict) or not isinstance(mapping, dict):
+        return False
+    norm = lambda d: {str(k): str(v) for k, v in sorted(d.items())}
+    return norm(sol) == norm(mapping)
+
+
+def task_payload_terminal_for_client(cfg: dict[str, Any]) -> dict[str, Any]:
+    """Без reference_code и без expected_stdout (ученик проверяется отправкой outputs на сервер)."""
+    out: dict[str, Any] = {
+        "kind": "terminal_io",
+        "story": cfg.get("story"),
+        "requirements": cfg.get("requirements"),
+        "book_example": cfg.get("book_example"),
+    }
+    tests_out = []
+    for t in cfg.get("tests") or []:
+        if not isinstance(t, dict):
+            continue
+        tests_out.append(
+            {
+                "stdin": str(t.get("stdin", "")),
+                "public": bool(t.get("public")),
+            }
+        )
+    out["tests"] = tests_out
+    return out
+
+
+def task_payload_dragdrop_for_client(cfg: dict[str, Any]) -> dict[str, Any]:
+    return {
+        "kind": "dragdrop",
+        "instruction": cfg.get("instruction", ""),
+        "slots": cfg.get("slots") or [],
+        "items": cfg.get("items") or [],
+    }
+
+
 def parse_checker_config(raw: str | None) -> dict[str, Any]:
     if not raw:
         return {}

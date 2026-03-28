@@ -1,0 +1,212 @@
+/* Катсцена Йотунхейм: цельный фон с драконом и Артемием, реплики поверх */
+
+.jot-cutscene-stage {
+  position: relative;
+  min-height: min(62vh, 560px);
+  background-size: cover;
+  background-position: center;
+  background-repeat: no-repeat;
+  cursor: pointer;
+}
+
+.jot-bubble {
+  position: absolute;
+  bottom: 8%;
+  max-width: min(92%, 380px);
+  background: rgba(255, 255, 255, 0.96);
+  border: 2px solid #c62828;
+  border-radius: 16px;
+  padding: 12px 14px;
+  color: #1b5e20;
+  box-shadow: 0 8px 28px rgba(0, 0, 0, 0.2);
+  font-size: 14px;
+  line-height: 1.45;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.jot-bubble--left {
+  left: 3%;
+}
+
+.jot-bubble--right {
+  right: 3%;
+}
+
+.jot-bubble-speaker {
+  font-size: 11px;
+  font-weight: 800;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  color: #b71c1c;
+}
+
+.jot-bubble-text {
+  font-weight: 600;
+  color: #1b5e20;
+}
+
+.jot-quiz-hint {
+  font-size: 13px;
+  color: #558b2f;
+}
+
+/* Тест: выражение + пропуск + карточки */
+.jot-expr {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin: 20px 0 8px;
+  padding: 18px 20px;
+  background: linear-gradient(180deg, #fafafa 0%, #eceff1 100%);
+  border: 2px dashed #78909c;
+  border-radius: 14px;
+  font-family: ui-monospace, 'Cascadia Code', 'Consolas', monospace;
+  font-size: clamp(1.05rem, 2.8vw, 1.35rem);
+  font-weight: 700;
+  color: #1b5e20;
+  line-height: 1.5;
+}
+
+.jot-expr-part {
+  white-space: pre-wrap;
+}
+
+.jot-slot {
+  min-width: 56px;
+  min-height: 48px;
+  padding: 4px 10px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border: 3px solid #2e7d32;
+  border-radius: 10px;
+  background: #fff;
+  box-shadow: inset 0 2px 8px rgba(0, 0, 0, 0.06);
+  transition:
+    border-color 0.15s ease,
+    background 0.15s ease;
+}
+
+.jot-slot--ok {
+  border-color: #2e7d32;
+  background: #e8f5e9;
+}
+
+.jot-slot--bad {
+  border-color: #c62828;
+  background: #ffebee;
+  animation: jot-shake 0.45s ease;
+}
+
+@keyframes jot-shake {
+  0%,
+  100% {
+    transform: translateX(0);
+  }
+
+  25% {
+    transform: translateX(-4px);
+  }
+
+  75% {
+    transform: translateX(4px);
+  }
+}
+
+.jot-slot-placeholder {
+  color: #90a4ae;
+  font-weight: 800;
+}
+
+.jot-bank-label {
+  margin: 16px 0 8px;
+  font-size: 13px;
+  font-weight: 700;
+  color: #558b2f;
+}
+
+.jot-bank {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 12px;
+  align-items: stretch;
+}
+
+.jot-op-card {
+  cursor: grab;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 4px;
+  min-width: 88px;
+  padding: 12px 14px;
+  border: 2px solid #43a047;
+  border-radius: 14px;
+  background: linear-gradient(165deg, #ffffff 0%, #e8f5e9 100%);
+  box-shadow: 0 4px 14px rgba(46, 125, 50, 0.15);
+  font: inherit;
+  color: #1b5e20;
+  transition:
+    transform 0.12s ease,
+    box-shadow 0.12s ease;
+}
+
+.jot-op-card:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 8px 22px rgba(46, 125, 50, 0.22);
+}
+
+.jot-op-card:active {
+  cursor: grabbing;
+  transform: translateY(0);
+}
+
+.jot-op-card-symbol {
+  font-size: 1.65rem;
+  font-weight: 800;
+  line-height: 1;
+  font-family: ui-monospace, 'Cascadia Code', monospace;
+}
+
+.jot-op-card-sub {
+  font-size: 11px;
+  font-weight: 600;
+  color: #558b2f;
+  letter-spacing: 0.02em;
+}
+
+.jot-quiz-feedback {
+  margin-top: 14px;
+  font-weight: 600;
+}
+
+.jot-quiz-feedback--ok {
+  color: #2e7d32;
+}
+
+.jot-quiz-feedback--bad {
+  color: #c62828;
+}
+
+@media (max-width: 560px) {
+  .jot-cutscene-stage {
+    min-height: 48vh;
+  }
+
+  .jot-bubble {
+    max-width: 94%;
+    bottom: 4%;
+    font-size: 13px;
+  }
+
+  .jot-bubble--left,
+  .jot-bubble--right {
+    left: 50%;
+    right: auto;
+    transform: translateX(-50%);
+  }
+}

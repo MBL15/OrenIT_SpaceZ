@@ -109,8 +109,18 @@ def seed_if_empty(db: Session) -> None:
 
     asgard_title = "Основы информатики — Асгард"
     lasgard = Lesson(title=asgard_title, sort_order=1, is_published=True, created_at=_now_iso())
-    l1 = Lesson(title="Урок 1. Сложение", sort_order=2, is_published=False, created_at=_now_iso())
-    l2 = Lesson(title="Урок 2. Вычитание", sort_order=3, is_published=False, created_at=_now_iso())
+    l1 = Lesson(
+        title="Йотунхейм — встреча с драконом",
+        sort_order=2,
+        is_published=True,
+        created_at=_now_iso(),
+    )
+    l2 = Lesson(
+        title="Ванахейм — знакомство с землёй",
+        sort_order=3,
+        is_published=True,
+        created_at=_now_iso(),
+    )
     db.add_all([lasgard, l1, l2])
     db.flush()
 
@@ -129,7 +139,8 @@ def seed_if_empty(db: Session) -> None:
                 lesson_id=l1.id,
                 sort_order=1,
                 body_markdown=(
-                    "## Сложение\n\nСкладываем числа по разрядам. "
+                    "## Блок 2 на карте курса\n\n"
+                    "Складываем числа по разрядам — то же направление, что локация **Йотунхейм** на карте. "
                     "Маскот **Артемий** любит, когда ответ получается быстро и верно!"
                 ),
             ),
@@ -137,7 +148,8 @@ def seed_if_empty(db: Session) -> None:
                 lesson_id=l2.id,
                 sort_order=1,
                 body_markdown=(
-                    "## Вычитание\n\nИз большего вычитаем меньшее. "
+                    "## Блок 3 на карте курса\n\n"
+                    "Из большего вычитаем меньшее — параллельно теме **Ванахейм** на карте. "
                     "Если запутаешься — перечитай пример из теории."
                 ),
             ),
@@ -169,7 +181,7 @@ def seed_if_empty(db: Session) -> None:
                 param_spec_json='{"a":{"min":2,"max":12},"b":{"min":2,"max":12}}',
                 checker_type="numeric",
                 checker_config_json='{"kind":"binary","op":"+","left":"a","right":"b"}',
-                assignable_by_teacher=False,
+                assignable_by_teacher=True,
                 counts_toward_lesson_practice=True,
             ),
             TaskTemplate(
@@ -180,7 +192,7 @@ def seed_if_empty(db: Session) -> None:
                 param_spec_json='{"a":{"min":10,"max":25},"b":{"min":1,"max":9}}',
                 checker_type="numeric",
                 checker_config_json='{"kind":"binary","op":"-","left":"a","right":"b"}',
-                assignable_by_teacher=False,
+                assignable_by_teacher=True,
                 counts_toward_lesson_practice=True,
             ),
         ]

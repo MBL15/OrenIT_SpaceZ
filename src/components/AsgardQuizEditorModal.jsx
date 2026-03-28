@@ -1,10 +1,11 @@
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
 import {
   clearAsgardQuizSpecStorage,
   DEFAULT_ASGARD_QUIZ_SPEC,
   normalizeAsgardQuizSpec,
   saveAsgardQuizSpec,
 } from '../lib/asgardQuizSpec.js'
+import { useDialogPresence } from '../hooks/useDialogPresence.js'
 import './AsgardQuizEditorModal.css'
 
 function IconPencil() {
@@ -54,7 +55,18 @@ export default function AsgardQuizEditorModal({ open, spec, onClose, onSaved }) 
   const [draft, setDraft] = useState(() => cloneSpec(spec))
   const [saveErr, setSaveErr] = useState('')
 
-  if (!open) return null
+  const { shouldRender, exiting, requestClose, handleExitEnd } = useDialogPresence(
+    open,
+    onClose,
+  )
+
+  useEffect(() => {
+    if (!open) return
+    setDraft(cloneSpec(spec))
+    setSaveErr('')
+  }, [open, spec])
+
+  if (!shouldRender) return null
 
   const updateQuestion = (qi, patch) => {
     setDraft((prev) => {
@@ -113,29 +125,34 @@ export default function AsgardQuizEditorModal({ open, spec, onClose, onSaved }) 
     }
     saveAsgardQuizSpec(norm)
     onSaved(norm)
-    onClose()
+    requestClose()
   }
 
   const handleResetDefaults = () => {
     clearAsgardQuizSpecStorage()
     onSaved(cloneSpec(DEFAULT_ASGARD_QUIZ_SPEC))
-    onClose()
+    requestClose()
   }
 
   return (
-    <div className="asg-edit-backdrop" role="presentation" onClick={onClose}>
+    <div
+      className={`asg-edit-backdrop${exiting ? ' asg-edit-backdrop--exit' : ''}`}
+      role="presentation"
+      onClick={requestClose}
+    >
       <div
-        className="asg-edit-modal"
+        className={`asg-edit-modal${exiting ? ' asg-edit-modal--exit' : ''}`}
         role="dialog"
         aria-modal="true"
         aria-labelledby="asg-edit-title"
+        onAnimationEnd={handleExitEnd}
         onClick={(e) => e.stopPropagation()}
       >
         <div className="asg-edit-head">
           <h2 id="asg-edit-title" className="asg-edit-title">
             Редактирование теста «Асгард»
           </h2>
-          <button type="button" className="asg-edit-close" onClick={onClose} aria-label="Закрыть">
+          <button type="button" className="asg-edit-close" onClick={requestClose} aria-label="Закрыть">
             ×
           </button>
         </div>
@@ -211,7 +228,7 @@ export default function AsgardQuizEditorModal({ open, spec, onClose, onSaved }) 
         </div>
 
         <div className="asg-edit-footer">
-          <button type="button" className="asg-edit-btn asg-edit-btn--ghost" onClick={onClose}>
+          <button type="button" className="asg-edit-btn asg-edit-btn--ghost" onClick={requestClose}>
             Отмена
           </button>
           <button

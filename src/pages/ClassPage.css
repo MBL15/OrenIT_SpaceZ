@@ -549,47 +549,11 @@
   color: #424242;
 }
 
-.cp-teacher-students,
-.cp-teacher-assignments {
+.cp-teacher-students {
   margin: 8px 0 0;
   padding-left: 1.2rem;
   color: var(--cp-green-dark);
   font-size: 14px;
-}
-
-.cp-teacher-assignments .cp-teacher-assignment-row {
-  display: flex;
-  justify-content: space-between;
-  align-items: flex-start;
-  gap: 12px;
-  margin-bottom: 8px;
-  list-style: disc;
-}
-
-.cp-teacher-assignment-main {
-  flex: 1;
-  min-width: 0;
-}
-
-.cp-teacher-assignment-actions {
-  display: flex;
-  flex-direction: column;
-  align-items: flex-end;
-  gap: 6px;
-  flex-shrink: 0;
-}
-
-.cp-teacher-assignment-del-block {
-  font-size: 12px;
-  padding: 4px 10px;
-  white-space: nowrap;
-}
-
-.cp-teacher-assignment-del {
-  flex-shrink: 0;
-  font-size: 13px;
-  padding: 4px 10px;
-  margin-top: 0;
 }
 
 .cp-teacher-assign {
@@ -764,8 +728,48 @@
   overflow-y: auto;
 }
 
+.cp-teacher-hw-list-row {
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+}
+
+@media (max-width: 520px) {
+  .cp-teacher-hw-list-row {
+    flex-direction: column;
+  }
+
+  .cp-teacher-hw-item-actions {
+    flex-direction: row;
+    flex-wrap: wrap;
+    width: 100%;
+  }
+}
+
+.cp-teacher-hw-item-actions {
+  display: flex;
+  flex-direction: column;
+  align-items: stretch;
+  gap: 6px;
+  flex-shrink: 0;
+  padding-top: 2px;
+}
+
+.cp-teacher-hw-del-block {
+  font-size: 12px;
+  padding: 4px 10px;
+  white-space: nowrap;
+}
+
+.cp-teacher-hw-del {
+  font-size: 13px;
+  padding: 4px 10px;
+}
+
 .cp-teacher-hw-item {
-  width: 100%;
+  flex: 1;
+  min-width: 0;
+  width: auto;
   text-align: left;
   padding: 12px 14px;
   border-radius: 12px;

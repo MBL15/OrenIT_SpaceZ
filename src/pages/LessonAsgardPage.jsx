@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react'
+import { useCallback, useEffect, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import artemiyUrl from '../assets/artemiy.png'
 import odinUrl from '../assets/odin.png'
@@ -14,6 +14,7 @@ import {
   specToQuizSteps,
 } from '../lib/asgardQuizSpec.js'
 import { shuffleAllQuizSteps } from '../lib/shuffleQuizOptions.js'
+import { useDialogPresence } from '../hooks/useDialogPresence.js'
 import './LessonAsgardPage.css'
 
 const STORAGE_KEY = 'spaceedu-asgard-complete'
@@ -77,6 +78,18 @@ export default function LessonAsgardPage() {
   /** Награда для модалки: с API или демо. */
   const [rewardModal, setRewardModal] = useState(null)
   const [shuffledQuiz, setShuffledQuiz] = useState(null)
+
+  const finishCorrectModal = useCallback(() => {
+    setShowCorrectModal(false)
+    setCompletedView(true)
+  }, [])
+
+  const {
+    shouldRender: resultModalVisible,
+    exiting: resultModalExiting,
+    requestClose: requestCloseResultModal,
+    handleExitEnd: handleResultModalExitEnd,
+  } = useDialogPresence(showCorrectModal, finishCorrectModal)
 
   const totalQuestions = quizSpec.length
   const isLastQuestion = totalQuestions > 0 && questionStep === totalQuestions
@@ -442,13 +455,17 @@ export default function LessonAsgardPage() {
           )}
         </div>
       </div>
-      {showCorrectModal ? (
-        <div className="asg-result-backdrop" role="presentation">
+      {resultModalVisible ? (
+        <div
+          className={`asg-result-backdrop${resultModalExiting ? ' asg-result-backdrop--exit' : ''}`}
+          role="presentation"
+        >
           <div
-            className="asg-result-modal"
+            className={`asg-result-modal${resultModalExiting ? ' asg-result-modal--exit' : ''}`}
             role="dialog"
             aria-modal="true"
             aria-labelledby="asg-result-title"
+            onAnimationEnd={handleResultModalExitEnd}
           >
             <h2 id="asg-result-title" className="asg-h2">
               Все правильно!
@@ -481,10 +498,7 @@ export default function LessonAsgardPage() {
             <button
               type="button"
               className="asg-btn-primary"
-              onClick={() => {
-                setShowCorrectModal(false)
-                setCompletedView(true)
-              }}
+              onClick={requestCloseResultModal}
             >
               Продолжить
             </button>

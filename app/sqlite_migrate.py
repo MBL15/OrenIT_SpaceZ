@@ -179,6 +179,24 @@ def backfill_class_invite_codes(session: Session) -> None:
         session.commit()
 
 
+def ensure_catalog_blocks_2_3_teacher_assignable(session: Session) -> None:
+    """Уроки с sort_order 2 и 3 (блоки карты «Йотунхейм» и «Ванахейм»): в каталоге и доступны учителю для ДЗ."""
+    title_upgrade = {
+        "Урок 1. Сложение": "Йотунхейм — встреча с драконом",
+        "Урок 2. Вычитание": "Ванахейм — знакомство с землёй",
+    }
+    for lesson in session.query(Lesson).filter(Lesson.sort_order.in_((2, 3))).all():
+        new_title = title_upgrade.get(lesson.title)
+        if new_title:
+            lesson.title = new_title
+        lesson.is_published = True
+        session.query(TaskTemplate).filter(TaskTemplate.lesson_id == lesson.id).update(
+            {TaskTemplate.assignable_by_teacher: True},
+            synchronize_session=False,
+        )
+    session.commit()
+
+
 def _now_iso() -> str:
     return datetime.now(timezone.utc).replace(microsecond=0).isoformat()
 

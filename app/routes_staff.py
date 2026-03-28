@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import json
 from datetime import datetime, timezone
 from typing import Annotated, Literal
 
@@ -518,6 +519,7 @@ def teacher_assignments_history(
                 created_at=row.created_at,
                 reward_coins=rc,
                 reward_xp=rx,
+                block_id=row.block_id,
                 class_name=cid_to_name.get(row.class_id, ""),
             )
         )
@@ -883,6 +885,64 @@ def create_user(
     return u
 
 
+@admin_router.get("/lessons", response_model=list[LessonOut])
+def admin_list_lessons(
+    db: Annotated[Session, Depends(get_db)],
+    _: Annotated[User, Depends(require_roles("admin"))],
+) -> list[Lesson]:
+    return db.query(Lesson).order_by(Lesson.sort_order, Lesson.id).all()
+
+
+def _validate_admin_task_config(body: AdminTaskBody) -> None:
+    """Проверка checker_config_json для kind terminal_io и dragdrop."""
+    raw = body.checker_config_json
+    if raw is None or not str(raw).strip():
+        return
+    try:
+        cfg = json.loads(raw)
+    except json.JSONDecodeError as e:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=f"checker_config_json: невалидный JSON ({e})",
+        ) from e
+    kind = cfg.get("kind")
+    if kind == "terminal_io":
+        tests = cfg.get("tests")
+        if not isinstance(tests, list) or len(tests) < 1:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="terminal_io: нужен непустой массив tests",
+            )
+        for i, t in enumerate(tests):
+            if not isinstance(t, dict):
+                raise HTTPException(
+                    status_code=status.HTTP_400_BAD_REQUEST,
+                    detail=f"terminal_io: tests[{i}] должен быть объектом",
+                )
+            if "stdin" not in t or "expected_stdout" not in t:
+                raise HTTPException(
+                    status_code=status.HTTP_400_BAD_REQUEST,
+                    detail="terminal_io: у каждого теста должны быть stdin и expected_stdout",
+                )
+    elif kind == "dragdrop":
+        for key in ("slots", "items", "solution"):
+            if key not in cfg:
+                raise HTTPException(
+                    status_code=status.HTTP_400_BAD_REQUEST,
+                    detail=f"dragdrop: в конфиге нужен ключ {key}",
+                )
+        if not isinstance(cfg.get("slots"), list) or not isinstance(cfg.get("items"), list):
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="dragdrop: slots и items — массивы",
+            )
+        if not isinstance(cfg.get("solution"), dict):
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="dragdrop: solution — объект slot_id -> item_id",
+            )
+
+
 @admin_router.post("/lessons", response_model=LessonOut)
 def create_lesson(
     body: AdminLessonBody,
@@ -934,6 +994,7 @@ def add_task(
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Lesson not found")
     if body.checker_type not in ("numeric", "expression"):
         raise HTTPException(status_code=400, detail="Invalid checker_type")
+    _validate_admin_task_config(body)
     t = TaskTemplate(
         lesson_id=lesson_id,
         sort_order=body.sort_order,

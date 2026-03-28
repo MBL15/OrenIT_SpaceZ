@@ -13,6 +13,8 @@ import ClassPage from './pages/ClassPage.jsx'
 import TeacherCabinetPage from './pages/TeacherCabinetPage.jsx'
 import ProfilePage from './pages/ProfilePage.jsx'
 import LessonAsgardPage from './pages/LessonAsgardPage.jsx'
+import LessonJotunheimPage from './pages/LessonJotunheimPage.jsx'
+import LessonVanaheimPage from './pages/LessonVanaheimPage.jsx'
 import ParentsPage from './pages/ParentsPage.jsx'
 import AssignmentsPage from './pages/AssignmentsPage.jsx'
 import AdminPage from './pages/AdminPage.jsx'
@@ -128,6 +130,22 @@ function App() {
           element={
             <ProtectedRoute>
               <LessonAsgardPage />
+            </ProtectedRoute>
+          }
+        />
+        <Route
+          path="/app/lesson/jotunheim"
+          element={
+            <ProtectedRoute>
+              <LessonJotunheimPage />
+            </ProtectedRoute>
+          }
+        />
+        <Route
+          path="/app/lesson/vanaheim"
+          element={
+            <ProtectedRoute>
+              <LessonVanaheimPage />
             </ProtectedRoute>
           }
         />

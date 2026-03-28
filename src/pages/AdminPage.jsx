@@ -5,6 +5,38 @@ import { useAuth } from '../AuthContext.jsx'
 import './ClassPage.css'
 import './AdminPage.css'
 
+const DEFAULT_TERMINAL_CONFIG = JSON.stringify(
+  {
+    kind: 'terminal_io',
+    story: 'Сложите два числа из ввода.',
+    requirements: 'Читайте два целых числа, выведите сумму.',
+    tests: [
+      { stdin: '2\n3\n', expected_stdout: '5\n', public: true },
+      { stdin: '10\n1\n', expected_stdout: '11\n', public: false },
+    ],
+  },
+  null,
+  2,
+)
+
+const DEFAULT_DRAGDROP_CONFIG = JSON.stringify(
+  {
+    kind: 'dragdrop',
+    instruction: 'Перетащите подписи в нужные области (или выберите из списка).',
+    slots: [
+      { id: 's1', label: 'Ввод данных' },
+      { id: 's2', label: 'Вывод на экран' },
+    ],
+    items: [
+      { id: 'i1', text: 'input()' },
+      { id: 'i2', text: 'print()' },
+    ],
+    solution: { s1: 'i1', s2: 'i2' },
+  },
+  null,
+  2,
+)
+
 const ROLES = [
   { value: 'child', label: 'Ученик' },
   { value: 'teacher', label: 'Учитель' },
@@ -120,21 +152,36 @@ export default function AdminPage() {
   const { user } = useAuth()
   const [users, setUsers] = useState([])
   const [stats, setStats] = useState(null)
+  const [lessons, setLessons] = useState([])
   const [loadErr, setLoadErr] = useState('')
   const [loading, setLoading] = useState(true)
   const [search, setSearch] = useState('')
   const [roleFilter, setRoleFilter] = useState('all')
 
+  const [taskLessonId, setTaskLessonId] = useState('')
+  const [taskTitle, setTaskTitle] = useState('')
+  const [taskPrompt, setTaskPrompt] = useState('')
+  const [taskMode, setTaskMode] = useState('terminal')
+  const [taskConfigJson, setTaskConfigJson] = useState(DEFAULT_TERMINAL_CONFIG)
+  const [taskSaving, setTaskSaving] = useState(false)
+  const [taskMsg, setTaskMsg] = useState('')
+
   const loadAll = useCallback(async () => {
     setLoadErr('')
     setLoading(true)
     try {
-      const [uRes, sRes] = await Promise.all([apiFetch('/admin/users'), apiFetch('/admin/stats')])
+      const [uRes, sRes, lRes] = await Promise.all([
+        apiFetch('/admin/users'),
+        apiFetch('/admin/stats'),
+        apiFetch('/admin/lessons'),
+      ])
       const uData = await readJsonResponse(uRes)
       const sData = await readJsonResponse(sRes)
+      const lData = await readJsonResponse(lRes)
 
       if (!uRes.ok) {
         setUsers([])
+        setLessons([])
         setStats(null)
         setLoadErr(
           uData && typeof uData === 'object'
@@ -145,6 +192,7 @@ export default function AdminPage() {
       }
       if (!sRes.ok) {
         setUsers(parseUsersPayload(uData))
+        setLessons(lRes.ok && Array.isArray(lData) ? lData : [])
         setStats(null)
         setLoadErr(
           sData && typeof sData === 'object'
@@ -155,6 +203,7 @@ export default function AdminPage() {
       }
 
       setUsers(parseUsersPayload(uData))
+      setLessons(lRes.ok && Array.isArray(lData) ? lData : [])
       setStats(
         sData && typeof sData === 'object'
           ? {
@@ -171,6 +220,7 @@ export default function AdminPage() {
       )
     } catch (e) {
       setUsers([])
+      setLessons([])
       setStats(null)
       const msg = e instanceof Error ? e.message : String(e)
       setLoadErr(
@@ -184,6 +234,10 @@ export default function AdminPage() {
   useEffect(() => {
     loadAll()
   }, [loadAll])
+
+  useEffect(() => {
+    setTaskConfigJson(taskMode === 'terminal' ? DEFAULT_TERMINAL_CONFIG : DEFAULT_DRAGDROP_CONFIG)
+  }, [taskMode])
 
   const filteredUsers = useMemo(() => {
     let list = users
@@ -199,6 +253,61 @@ export default function AdminPage() {
       return idStr.includes(q) || login.includes(q) || name.includes(q)
     })
   }, [users, search, roleFilter])
+
+  const submitAdminTask = async (e) => {
+    e.preventDefault()
+    setTaskMsg('')
+    const lid = Number(taskLessonId, 10)
+    if (!Number.isFinite(lid) || lid <= 0) {
+      setTaskMsg('Выберите урок из списка.')
+      return
+    }
+    let parsed
+    try {
+      parsed = JSON.parse(taskConfigJson)
+    } catch {
+      setTaskMsg('checker_config_json: невалидный JSON.')
+      return
+    }
+    const k = parsed.kind
+    if (taskMode === 'terminal' && k !== 'terminal_io') {
+      setTaskMsg('Для режима «Терминал» в JSON должно быть "kind": "terminal_io".')
+      return
+    }
+    if (taskMode === 'dragdrop' && k !== 'dragdrop') {
+      setTaskMsg('Для режима «Перетаскивание» в JSON должно быть "kind": "dragdrop".')
+      return
+    }
+    const prompt =
+      taskPrompt.trim() ||
+      (typeof parsed.story === 'string' ? parsed.story : '') ||
+      (typeof parsed.instruction === 'string' ? parsed.instruction : '') ||
+      'Задание'
+    setTaskSaving(true)
+    try {
+      const res = await apiFetch(`/admin/lessons/${lid}/tasks`, {
+        method: 'POST',
+        body: JSON.stringify({
+          title: taskTitle.trim() || null,
+          sort_order: 0,
+          prompt_template: prompt,
+          param_spec_json: '{}',
+          checker_type: 'numeric',
+          checker_config_json: taskConfigJson,
+        }),
+      })
+      const data = await res.json().catch(() => ({}))
+      if (!res.ok) {
+        setTaskMsg(parseErrorDetail(data))
+        return
+      }
+      setTaskMsg(`Задача создана (id ${data.id ?? '—'}). Назначьте её классу в кабинете учителя.`)
+      setTaskTitle('')
+      setTaskPrompt('')
+    } finally {
+      setTaskSaving(false)
+    }
+  }
 
   const statCards = stats
     ? [
@@ -359,6 +468,98 @@ export default function AdminPage() {
                 </table>
               </div>
             ) : null}
+          </section>
+
+          <section className="ap-section" aria-labelledby="ap-task-heading">
+            <h2 id="ap-task-heading" className="ap-section-title">
+              Задачи урока (терминал или перетаскивание)
+            </h2>
+            <p className="cp-teacher-muted ap-muted-block" style={{ marginBottom: 12 }}>
+              Создаётся шаблон задачи с проверкой на сервере. Ученик увидит задание в разделе «Задания от
+              учителя» после назначения классу. Для терминала задаются тесты stdin/expected_stdout; эталонный
+              код на сервере не выполняется — ученик пишет программу в браузере (Pyodide).
+            </p>
+            {lessons.length === 0 && !loading ? (
+              <p className="cp-teacher-muted ap-muted-block">Нет уроков в каталоге. Сначала создайте урок через API.</p>
+            ) : (
+              <form className="ap-task-form" onSubmit={submitAdminTask}>
+                <label className="ap-search-label">
+                  <span className="ap-search-hint">Урок</span>
+                  <select
+                    className="space-input ap-search-input"
+                    value={taskLessonId}
+                    onChange={(e) => setTaskLessonId(e.target.value)}
+                    required
+                  >
+                    <option value="">— выберите —</option>
+                    {lessons.map((l) => (
+                      <option key={l.id} value={String(l.id)}>
+                        {l.id}. {l.title}
+                      </option>
+                    ))}
+                  </select>
+                </label>
+                <label className="ap-search-label">
+                  <span className="ap-search-hint">Заголовок задачи (необязательно)</span>
+                  <input
+                    type="text"
+                    className="space-input ap-search-input"
+                    value={taskTitle}
+                    onChange={(e) => setTaskTitle(e.target.value)}
+                    placeholder="Например: Сложение чисел"
+                  />
+                </label>
+                <label className="ap-search-label">
+                  <span className="ap-search-hint">Текст для ученика (prompt)</span>
+                  <textarea
+                    className="space-input ap-search-input"
+                    rows={2}
+                    value={taskPrompt}
+                    onChange={(e) => setTaskPrompt(e.target.value)}
+                    placeholder="Если пусто — возьмётся story или instruction из JSON"
+                  />
+                </label>
+                <div className="ap-role-filters" role="group" aria-label="Тип задачи">
+                  <button
+                    type="button"
+                    className={`ap-chip ${taskMode === 'terminal' ? 'ap-chip--on' : ''}`}
+                    onClick={() => setTaskMode('terminal')}
+                  >
+                    Терминал (Python stdin/stdout)
+                  </button>
+                  <button
+                    type="button"
+                    className={`ap-chip ${taskMode === 'dragdrop' ? 'ap-chip--on' : ''}`}
+                    onClick={() => setTaskMode('dragdrop')}
+                  >
+                    Перетаскивание (слоты и ответы)
+                  </button>
+                </div>
+                <label className="ap-search-label">
+                  <span className="ap-search-hint">checker_config_json</span>
+                  <textarea
+                    className="space-input ap-task-json"
+                    spellCheck={false}
+                    rows={16}
+                    value={taskConfigJson}
+                    onChange={(e) => setTaskConfigJson(e.target.value)}
+                    required
+                  />
+                </label>
+                {taskMsg ? (
+                  <p className={taskMsg.startsWith('Задача создана') ? 'cp-teacher-muted' : 'cp-teacher-err'}>
+                    {taskMsg}
+                  </p>
+                ) : null}
+                <button
+                  type="submit"
+                  className="space-btn space-btn--primary"
+                  disabled={taskSaving || lessons.length === 0}
+                >
+                  {taskSaving ? 'Сохранение…' : 'Создать задачу'}
+                </button>
+              </form>
+            )}
           </section>
         </div>
       </div>

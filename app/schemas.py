@@ -49,8 +49,16 @@ class ParentVerifyBody(BaseModel):
 
 
 class PracticeSubmitBody(BaseModel):
-    answer: str
+    answer: str = ""
     started_at: str | None = None
+    terminal_outputs: list[str] | None = Field(
+        default=None,
+        description="Для kind=terminal_io: stdout по каждому тесту (нормализованный), по порядку tests",
+    )
+    dragdrop_mapping: dict[str, str] | None = Field(
+        default=None,
+        description="Для kind=dragdrop: slot_id -> item_id",
+    )
 
 
 class BuyBody(BaseModel):

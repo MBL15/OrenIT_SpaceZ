@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useState } from 'react'
 import { apiFetch, parseErrorDetail } from '../api.js'
+import { useDialogPresence } from '../hooks/useDialogPresence.js'
 import { resolveArtemiySkin } from '../lib/mascotSkins.js'
 import './ArtemiySkinShopModal.css'
 
@@ -25,6 +26,9 @@ export default function ArtemiySkinShopModal({
   const [balance, setBalance] = useState(null)
   const [error, setError] = useState('')
   const [busy, setBusy] = useState(null)
+
+  const { shouldRender, exiting, requestClose, handleExitEnd } =
+    useDialogPresence(open, onClose)
 
   const load = useCallback(async () => {
     await Promise.resolve()
@@ -136,27 +140,30 @@ export default function ArtemiySkinShopModal({
     setBusy(null)
   }
 
-  if (!open) return null
+  if (!shouldRender) return null
 
   const bySlot = (slot) => items.filter((i) => i.slot === slot).sort((a, b) => a.id - b.id)
 
   return (
     <div
-      className="skin-shop-overlay"
+      className={`skin-shop-overlay${exiting ? ' skin-shop-overlay--exit' : ''}`}
       role="dialog"
       aria-modal="true"
       aria-labelledby="skin-shop-title"
       onMouseDown={(e) => {
-        if (e.target === e.currentTarget) onClose()
+        if (e.target === e.currentTarget) requestClose()
       }}
     >
-      <div className="skin-shop-panel">
+      <div
+        className={`skin-shop-panel${exiting ? ' skin-shop-panel--exit' : ''}`}
+        onAnimationEnd={handleExitEnd}
+      >
         <header className="skin-shop-head">
           <h2 id="skin-shop-title">Магазин Артемия</h2>
           <button
             type="button"
             className="skin-shop-close"
-            onClick={onClose}
+            onClick={requestClose}
             aria-label="Закрыть"
           >
             ×

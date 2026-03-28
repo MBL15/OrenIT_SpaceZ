@@ -39,7 +39,6 @@ export default function TeacherCabinetPage() {
   const [inviteCode, setInviteCode] = useState('')
   const [inviteToken, setInviteToken] = useState('')
   const [students, setStudents] = useState([])
-  const [assignments, setAssignments] = useState([])
   const [lessons, setLessons] = useState([])
   const [lessonDetail, setLessonDetail] = useState(null)
   const [pickLessonId, setPickLessonId] = useState('')
@@ -80,16 +79,16 @@ export default function TeacherCabinetPage() {
     })
   }, [filteredHwHistory])
 
-  /** Одна кнопка «Удалить весь блок» на блок: показываем у первой строки этого block_id в списке. */
-  const blockDeleteAnchorId = useMemo(() => {
+  /** В журнале ДЗ: одна кнопка «Удалить весь блок» на блок — у первой строки с этим block_id. */
+  const hwBlockDeleteAnchorId = useMemo(() => {
     const m = new Map()
-    for (const a of assignments) {
+    for (const a of filteredHwHistory) {
       if (a.block_id != null && !m.has(a.block_id)) {
         m.set(a.block_id, a.id)
       }
     }
     return m
-  }, [assignments])
+  }, [filteredHwHistory])
 
   const loadClasses = useCallback(async () => {
     const res = await apiFetch('/teacher/classes')
@@ -131,10 +130,9 @@ export default function TeacherCabinetPage() {
   const loadClassDetails = useCallback(async (classId) => {
     if (!classId) return
     setErr('')
-    const [invRes, stRes, asRes] = await Promise.all([
+    const [invRes, stRes] = await Promise.all([
       apiFetch(`/teacher/classes/${classId}/invite`),
       apiFetch(`/teacher/classes/${classId}/students`),
-      apiFetch(`/teacher/classes/${classId}/assignments`),
     ])
     if (invRes.ok) {
       const inv = await invRes.json().catch(() => ({}))
@@ -149,10 +147,6 @@ export default function TeacherCabinetPage() {
       const s = await stRes.json().catch(() => [])
       setStudents(Array.isArray(s) ? s : [])
     } else setStudents([])
-    if (asRes.ok) {
-      const a = await asRes.json().catch(() => [])
-      setAssignments(Array.isArray(a) ? a : [])
-    } else setAssignments([])
   }, [])
 
   useEffect(() => {
@@ -357,7 +351,8 @@ export default function TeacherCabinetPage() {
   }
 
   const handleDeleteAssignment = async (a) => {
-    if (!selectedId) return
+    const classId = a.class_id
+    if (classId == null) return
     const ok = window.confirm(
       'Удалить только это задание из назначенных? Прогресс учеников по нему будет удалён.',
     )
@@ -367,7 +362,7 @@ export default function TeacherCabinetPage() {
     setDeletingAssignmentId(a.id)
     try {
       const res = await apiFetch(
-        `/teacher/classes/${selectedId}/assignments/${a.id}`,
+        `/teacher/classes/${classId}/assignments/${a.id}`,
         { method: 'DELETE' },
       )
       if (!res.ok) {
@@ -375,15 +370,18 @@ export default function TeacherCabinetPage() {
         return
       }
       setBanner('Задание снято с класса')
-      await loadClassDetails(selectedId)
+      if (selectedId === classId) {
+        await loadClassDetails(selectedId)
+      }
+      setHwSelected((prev) => (prev?.id === a.id ? null : prev))
       await refreshHwHistory()
     } finally {
       setDeletingAssignmentId(null)
     }
   }
 
-  const handleDeleteBlock = async (blockId) => {
-    if (!selectedId || blockId == null) return
+  const handleDeleteBlock = async (blockId, classId) => {
+    if (classId == null || blockId == null) return
     const ok = window.confirm(
       'Удалить весь блок: все задания из этого пакета и связанный прогресс учеников?',
     )
@@ -393,7 +391,7 @@ export default function TeacherCabinetPage() {
     setDeletingBlockId(blockId)
     try {
       const res = await apiFetch(
-        `/teacher/classes/${selectedId}/assignment-blocks/${blockId}`,
+        `/teacher/classes/${classId}/assignment-blocks/${blockId}`,
         { method: 'DELETE' },
       )
       if (!res.ok) {
@@ -401,7 +399,12 @@ export default function TeacherCabinetPage() {
         return
       }
       setBanner('Блок назначений удалён')
-      await loadClassDetails(selectedId)
+      if (selectedId === classId) {
+        await loadClassDetails(selectedId)
+      }
+      setHwSelected((prev) =>
+        prev && prev.block_id === blockId && prev.class_id === classId ? null : prev,
+      )
       await refreshHwHistory()
     } finally {
       setDeletingBlockId(null)
@@ -455,7 +458,8 @@ export default function TeacherCabinetPage() {
               Выберите назначенное ранее задание слева — справа отобразится список учеников
               класса. Оценка по заданию: <strong>5</strong> без ошибок,{' '}
               <strong>4</strong> при одной ошибке, <strong>3</strong> при двух,{' '}
-              <strong>2</strong> при трёх и более (минимальная оценка 2).
+              <strong>2</strong> при трёх и более (минимальная оценка 2). Снять одно
+              задание или весь блок с класса можно кнопками справа от записи в списке.
             </p>
             {hwErr ? <p className="cp-teacher-err">{hwErr}</p> : null}
             {hwLoading ? (
@@ -514,24 +518,61 @@ export default function TeacherCabinetPage() {
                   <ul className="cp-teacher-hw-list">
                     {filteredHwHistory.map((row) => (
                       <li key={row.id}>
-                        <button
-                          type="button"
-                          className={`cp-teacher-hw-item${hwSelected?.id === row.id ? ' cp-teacher-hw-item--on' : ''}`}
-                          onClick={() => setHwSelected(row)}
-                        >
-                          <span className="cp-teacher-hw-item-title">
-                            {row.class_name} · {row.lesson_title}
-                          </span>
-                          <span className="cp-teacher-hw-item-meta">
-                            {row.task_title || 'Задание'}
-                            {row.created_at
-                              ? ` · ${new Date(row.created_at).toLocaleString('ru-RU', { dateStyle: 'short', timeStyle: 'short' })}`
-                              : ''}
-                            <br />
-                            Награда: {row.reward_coins ?? 0} мон.
-                            {row.reward_xp ? `, ${row.reward_xp} XP` : ''}
-                          </span>
-                        </button>
+                        <div className="cp-teacher-hw-list-row">
+                          <button
+                            type="button"
+                            className={`cp-teacher-hw-item${hwSelected?.id === row.id ? ' cp-teacher-hw-item--on' : ''}`}
+                            onClick={() => setHwSelected(row)}
+                          >
+                            <span className="cp-teacher-hw-item-title">
+                              {row.class_name} · {row.lesson_title}
+                            </span>
+                            <span className="cp-teacher-hw-item-meta">
+                              {row.task_title || 'Задание'}
+                              {row.created_at
+                                ? ` · ${new Date(row.created_at).toLocaleString('ru-RU', { dateStyle: 'short', timeStyle: 'short' })}`
+                                : ''}
+                              <br />
+                              Награда: {row.reward_coins ?? 0} мон.
+                              {row.reward_xp ? `, ${row.reward_xp} XP` : ''}
+                            </span>
+                          </button>
+                          <div className="cp-teacher-hw-item-actions">
+                            {row.block_id != null &&
+                              hwBlockDeleteAnchorId.get(row.block_id) === row.id && (
+                                <button
+                                  type="button"
+                                  className="space-btn space-btn--outline cp-teacher-hw-del-block"
+                                  disabled={
+                                    deletingAssignmentId != null ||
+                                    deletingBlockId != null
+                                  }
+                                  aria-label="Удалить весь блок заданий"
+                                  onClick={() =>
+                                    void handleDeleteBlock(row.block_id, row.class_id)
+                                  }
+                                >
+                                  {deletingBlockId === row.block_id
+                                    ? 'Удаление…'
+                                    : 'Удалить весь блок'}
+                                </button>
+                              )}
+                            <button
+                              type="button"
+                              className="space-btn space-btn--ghost cp-teacher-hw-del"
+                              disabled={
+                                deletingAssignmentId != null ||
+                                deletingBlockId != null
+                              }
+                              aria-label="Удалить только это задание"
+                              onClick={() => void handleDeleteAssignment(row)}
+                            >
+                              {deletingAssignmentId === row.id
+                                ? 'Удаление…'
+                                : 'Удалить задание'}
+                            </button>
+                          </div>
+                        </div>
                       </li>
                     ))}
                   </ul>
@@ -867,68 +908,6 @@ export default function TeacherCabinetPage() {
                         : `Назначить блок (${batchTasks.length})`}
                     </button>
                   </form>
-                </section>
-
-                <section className="cp-teacher-block" aria-label="Назначенные">
-                  <h3 className="cp-teacher-h3">Назначенные задания</h3>
-                  <ul className="cp-teacher-assignments">
-                    {assignments.map((a) => (
-                      <li key={a.id} className="cp-teacher-assignment-row">
-                        <div className="cp-teacher-assignment-main">
-                          <span>
-                            {a.lesson_title}
-                            {a.task_title ? ` — ${a.task_title}` : ''}
-                          </span>
-                          <span className="cp-teacher-muted">
-                            {' '}
-                            · {a.reward_coins ?? 0} мон.
-                            {a.reward_xp ? `, ${a.reward_xp} XP` : ''}
-                          </span>
-                          {a.note ? (
-                            <span className="cp-teacher-muted"> ({a.note})</span>
-                          ) : null}
-                        </div>
-                        <div className="cp-teacher-assignment-actions">
-                          {a.block_id != null &&
-                            blockDeleteAnchorId.get(a.block_id) === a.id && (
-                              <button
-                                type="button"
-                                className="space-btn space-btn--outline cp-teacher-assignment-del-block"
-                                disabled={
-                                  deletingAssignmentId != null ||
-                                  deletingBlockId != null ||
-                                  pending
-                                }
-                                aria-label="Удалить весь блок заданий"
-                                onClick={() => handleDeleteBlock(a.block_id)}
-                              >
-                                {deletingBlockId === a.block_id
-                                  ? 'Удаление…'
-                                  : 'Удалить весь блок'}
-                              </button>
-                            )}
-                          <button
-                            type="button"
-                            className="space-btn space-btn--ghost cp-teacher-assignment-del"
-                            disabled={
-                              deletingAssignmentId != null ||
-                              deletingBlockId != null ||
-                              pending
-                            }
-                            aria-label="Удалить только это задание"
-                            onClick={() => handleDeleteAssignment(a)}
-                          >
-                            {deletingAssignmentId === a.id
-                              ? 'Удаление…'
-                              : 'Удалить задание'}
-                          </button>
-                        </div>
-                      </li>
-                    ))}
-                  </ul>
-                  {assignments.length === 0 && (
-                    <p className="cp-teacher-muted">Пока нет назначений.</p>
-                  )}
                 </section>
               </>
             )}

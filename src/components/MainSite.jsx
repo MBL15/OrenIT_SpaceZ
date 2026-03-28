@@ -1,5 +1,6 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { Link, useLocation, useNavigate } from 'react-router-dom'
+import { useDialogPresence } from '../hooks/useDialogPresence.js'
 import courseMapImg from '../assets/course-map.png'
 import './MainSite.css'
 
@@ -26,6 +27,7 @@ const MAP_LESSONS = [
     drawerTitle: 'Йотунхейм — встреча с драконом.',
     drawerBody:
       'В ледяных просторах вас ждёт не просто задача, а настоящая «встреча с драконом»: плотное испытание, где важны хладнокровие и точный расчёт. Соберите всё, что уже освоили, и пройдите его без спешки — победа измеряется ясностью решения, а не скоростью.',
+    startPath: '/app/lesson/jotunheim',
   },
   {
     n: 3,
@@ -37,6 +39,7 @@ const MAP_LESSONS = [
     drawerTitle: 'Ванахейм — знакомство с землёй.',
     drawerBody:
       'Здесь вы буквально «познакомитесь с землёй»: задачи про земледелие и всё, что с ним связано — посевы и сроки, полив и урожай, ротацию грядок, подсчёт урожая и простые схемы хозяйства. Как настоящий участок, материал учит планировать циклы, считать ресурсы и видеть результат не сразу, а после «сезона» практики.',
+    startPath: '/app/lesson/vanaheim',
   },
   {
     n: 4,
@@ -187,11 +190,19 @@ function SectionGrid({ sections, onOpen }) {
 /** Панель справа для любой точки на карте (основы информатики) */
 function RealmLessonDrawer({ lesson, onClose }) {
   const navigate = useNavigate()
+  const lastLessonRef = useRef(null)
+  if (lesson) lastLessonRef.current = lesson
+  const displayLesson = lesson ?? lastLessonRef.current
+
+  const { shouldRender, exiting, requestClose, handleExitEnd } = useDialogPresence(
+    Boolean(lesson),
+    onClose,
+  )
 
   useEffect(() => {
-    if (!lesson) return undefined
+    if (!shouldRender) return undefined
     const onKey = (e) => {
-      if (e.key === 'Escape') onClose()
+      if (e.key === 'Escape') requestClose()
     }
     window.addEventListener('keydown', onKey)
     const prev = document.body.style.overflow
@@ -200,44 +211,45 @@ function RealmLessonDrawer({ lesson, onClose }) {
       window.removeEventListener('keydown', onKey)
       document.body.style.overflow = prev
     }
-  }, [lesson, onClose])
+  }, [shouldRender, requestClose])
 
-  if (!lesson) return null
+  if (!shouldRender || !displayLesson) return null
 
-  const titleId = `ms-realm-drawer-title-${lesson.n}`
+  const titleId = `ms-realm-drawer-title-${displayLesson.n}`
 
   const handleStart = () => {
-    if (lesson.startPath) navigate(lesson.startPath)
-    onClose()
+    if (displayLesson.startPath) navigate(displayLesson.startPath)
+    requestClose()
   }
 
   return (
     <div
-      className="ms-product-drawer-backdrop"
+      className={`ms-product-drawer-backdrop${exiting ? ' ms-product-drawer-backdrop--exit' : ''}`}
       role="presentation"
-      onClick={onClose}
+      onClick={requestClose}
     >
       <aside
-        className="ms-product-drawer"
+        className={`ms-product-drawer${exiting ? ' ms-product-drawer--exit' : ''}`}
         role="dialog"
         aria-modal="true"
         aria-labelledby={titleId}
+        onAnimationEnd={handleExitEnd}
         onClick={(e) => e.stopPropagation()}
       >
         <button
           type="button"
           className="ms-modal-close"
-          onClick={onClose}
+          onClick={requestClose}
           aria-label="Закрыть"
         >
           ×
         </button>
         <h2 id={titleId} className="ms-product-drawer-title">
-          {lesson.drawerTitle}
+          {displayLesson.drawerTitle}
         </h2>
-        <p className="ms-product-drawer-text">{lesson.drawerBody}</p>
+        <p className="ms-product-drawer-text">{displayLesson.drawerBody}</p>
         <div className="ms-product-drawer-actions">
-          {lesson.startPath ? (
+          {displayLesson.startPath ? (
             <button type="button" className="ms-modal-cta" onClick={handleStart}>
               Начать приключение
             </button>
@@ -249,7 +261,7 @@ function RealmLessonDrawer({ lesson, onClose }) {
           <button
             type="button"
             className="ms-modal-secondary"
-            onClick={onClose}
+            onClick={requestClose}
           >
             Вернуться к карте
           </button>

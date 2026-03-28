@@ -630,7 +630,7 @@
   justify-content: center;
   padding: 20px;
   background: rgba(0, 0, 0, 0.55);
-  animation: ms-fade-in 0.2s ease;
+  animation: ms-fade-in var(--dlg-enter-backdrop-dur) var(--dlg-ease-backdrop);
 }
 
 @keyframes ms-fade-in {
@@ -653,13 +653,13 @@
   box-shadow: 0 24px 64px rgba(0, 0, 0, 0.35);
   color: var(--ms-green-dark);
   text-align: left;
-  animation: ms-modal-in 0.28s ease;
+  animation: ms-modal-in var(--dlg-enter-modal-dur) var(--dlg-ease-modal);
 }
 
 @keyframes ms-modal-in {
   from {
     opacity: 0;
-    transform: translateY(14px) scale(0.98);
+    transform: translateY(18px) scale(0.985);
   }
   to {
     opacity: 1;
@@ -788,7 +788,11 @@
   align-items: stretch;
   padding: 0;
   background: rgba(0, 0, 0, 0.52);
-  animation: ms-fade-in 0.2s ease;
+  animation: ms-fade-in var(--dlg-enter-backdrop-dur) var(--dlg-ease-backdrop);
+}
+
+.ms-product-drawer-backdrop--exit {
+  animation: ms-product-drawer-backdrop-out 0.28s ease forwards;
 }
 
 .ms-product-drawer {
@@ -806,17 +810,48 @@
   box-shadow: -16px 0 48px rgba(0, 0, 0, 0.28);
   color: var(--ms-green-dark);
   text-align: left;
-  animation: ms-product-drawer-in 0.32s ease;
+  animation: ms-product-drawer-in var(--dlg-enter-modal-dur) var(--dlg-ease-modal);
+}
+
+.ms-product-drawer--exit {
+  animation: ms-product-drawer-out 0.28s ease forwards;
 }
 
 @keyframes ms-product-drawer-in {
   from {
-    opacity: 0.92;
-    transform: translateX(100%);
+    opacity: 0;
+    transform: translateX(104%);
   }
   to {
     opacity: 1;
     transform: translateX(0);
+  }
+}
+
+@keyframes ms-product-drawer-out {
+  from {
+    opacity: 1;
+    transform: translateX(0);
+  }
+  to {
+    opacity: 0.94;
+    transform: translateX(100%);
+  }
+}
+
+@keyframes ms-product-drawer-backdrop-out {
+  from {
+    opacity: 1;
+  }
+  to {
+    opacity: 0;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .ms-product-drawer-backdrop--exit,
+  .ms-product-drawer--exit {
+    animation-duration: 0.01ms !important;
   }
 }
 
@@ -943,6 +978,7 @@ button.ms-pill {
   border: none;
   background: rgba(15, 18, 22, 0.55);
   cursor: pointer;
+  animation: dlg-backdrop-in var(--dlg-enter-backdrop-dur) var(--dlg-ease-backdrop);
 }
 
 .ms-parents-modal {
@@ -961,6 +997,14 @@ button.ms-pill {
     0 24px 56px rgba(0, 0, 0, 0.45);
   overflow: hidden;
   color: var(--ms-green-dark);
+  animation: dlg-modal-pop-in var(--dlg-enter-modal-dur) var(--dlg-ease-modal);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .ms-parents-backdrop,
+  .ms-parents-modal {
+    animation-duration: 0.01ms !important;
+  }
 }
 
 .ms-parents-modal-scroll {

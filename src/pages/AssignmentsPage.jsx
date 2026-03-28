@@ -1,8 +1,10 @@
-import { useCallback, useEffect, useState } from 'react'
+import { useCallback, useEffect, useRef, useState } from 'react'
 import { createPortal } from 'react-dom'
 import { Link, Navigate } from 'react-router-dom'
 import { apiFetch, parseErrorDetail } from '../api.js'
 import { useAuth } from '../AuthContext.jsx'
+import { useDialogPresence } from '../hooks/useDialogPresence.js'
+import { collectStudentStdouts } from '../lib/runVanaheimPython.js'
 import './AssignmentsPage.css'
 
 function safeText(v) {
@@ -44,6 +46,28 @@ export default function AssignmentsPage() {
   const [workErr, setWorkErr] = useState('')
   const [startErr, setStartErr] = useState('')
   const [submitting, setSubmitting] = useState(false)
+  const [terminalCode, setTerminalCode] = useState('')
+  const [dragPlaced, setDragPlaced] = useState({})
+  const [dragActive, setDragActive] = useState(null)
+
+  const lastWorkoutRef = useRef(null)
+  if (workout) lastWorkoutRef.current = workout
+
+  const closeWorkout = useCallback(() => {
+    setWorkout(null)
+    setAnswer('')
+    setWorkErr('')
+    setStartErr('')
+  }, [])
+
+  const {
+    shouldRender: workoutModalVisible,
+    exiting: workoutExiting,
+    requestClose: requestCloseWorkout,
+    handleExitEnd: handleWorkoutExitEnd,
+  } = useDialogPresence(Boolean(workout), closeWorkout)
+
+  const displayWorkout = workout ?? lastWorkoutRef.current
 
   const load = useCallback(async () => {
     setLoadErr('')
@@ -67,13 +91,28 @@ export default function AssignmentsPage() {
   }, [user?.role, load])
 
   useEffect(() => {
-    if (!workout) return
+    if (!workoutModalVisible) return
     const prev = document.body.style.overflow
     document.body.style.overflow = 'hidden'
     return () => {
       document.body.style.overflow = prev
     }
-  }, [workout])
+  }, [workoutModalVisible])
+
+  useEffect(() => {
+    if (!workout?.instanceId) return
+    if (workout.ui_mode === 'terminal_io') {
+      setTerminalCode('')
+    }
+    if (workout.ui_mode === 'dragdrop' && workout.task_payload?.slots) {
+      const o = {}
+      for (const s of workout.task_payload.slots) {
+        o[s.id] = ''
+      }
+      setDragPlaced(o)
+    }
+    setDragActive(null)
+  }, [workout?.instanceId, workout?.ui_mode, workout?.task_payload])
 
   if (user?.role !== 'child') {
     return <Navigate to="/app" replace />
@@ -106,6 +145,7 @@ export default function AssignmentsPage() {
       prompt: data.prompt || '',
       ui_mode: data.ui_mode ?? null,
       choices: Array.isArray(data.choices) ? data.choices : null,
+      task_payload: data.task_payload ?? null,
       notice: data.notice ?? null,
       blockMode,
     })
@@ -132,12 +172,46 @@ export default function AssignmentsPage() {
       setWorkErr('Выберите вариант ответа')
       return
     }
+    if (workout.ui_mode === 'terminal_io' && !terminalCode.trim()) {
+      setWorkErr('Напишите программу на Python.')
+      return
+    }
+    let bodyPayload = { answer: answer.trim() }
+    if (workout.ui_mode === 'terminal_io') {
+      const tests = workout.task_payload?.tests || []
+      if (!tests.length) {
+        setWorkErr('Нет тестов в задании.')
+        return
+      }
+      setWorkErr('')
+      setSubmitting(true)
+      try {
+        const stdins = tests.map((t) => t.stdin)
+        const outs = await collectStudentStdouts(terminalCode, stdins)
+        bodyPayload = { answer: '', terminal_outputs: outs }
+      } catch (err) {
+        setWorkErr(err instanceof Error ? err.message : 'Ошибка выполнения кода')
+        setSubmitting(false)
+        return
+      }
+    } else if (workout.ui_mode === 'dragdrop') {
+      const mapping = {}
+      for (const [k, v] of Object.entries(dragPlaced)) {
+        if (v) mapping[k] = v
+      }
+      const slots = workout.task_payload?.slots || []
+      if (slots.length && slots.some((s) => !mapping[s.id])) {
+        setWorkErr('Заполните все области.')
+        return
+      }
+      bodyPayload = { answer: '', dragdrop_mapping: mapping }
+    }
     setWorkErr('')
     setSubmitting(true)
     try {
       const res = await apiFetch(`/practice/submit/${workout.instanceId}`, {
         method: 'POST',
-        body: JSON.stringify({ answer: answer.trim() }),
+        body: JSON.stringify(bodyPayload),
       })
       const data = await res.json().catch(() => ({}))
       if (!res.ok) {
@@ -181,6 +255,7 @@ export default function AssignmentsPage() {
           prompt: data2.prompt || '',
           ui_mode: data2.ui_mode ?? null,
           choices: Array.isArray(data2.choices) ? data2.choices : null,
+          task_payload: data2.task_payload ?? null,
           notice: data2.notice ?? null,
           blockMode: { ...bm, index: nextIdx },
         })
@@ -194,15 +269,8 @@ export default function AssignmentsPage() {
     }
   }
 
-  const closeWorkout = () => {
-    setWorkout(null)
-    setAnswer('')
-    setWorkErr('')
-    setStartErr('')
-  }
-
   const overlayMouseDown = (e) => {
-    if (e.target === e.currentTarget && workout?.done) closeWorkout()
+    if (e.target === e.currentTarget && displayWorkout?.done) requestCloseWorkout()
   }
 
   return (
@@ -324,77 +392,79 @@ export default function AssignmentsPage() {
         )}
       </div>
 
-      {workout &&
+      {workoutModalVisible &&
+        displayWorkout &&
         createPortal(
           <div
-            className="asm-overlay"
+            className={`asm-overlay${workoutExiting ? ' asm-overlay--exit' : ''}`}
             role="presentation"
             onMouseDown={overlayMouseDown}
           >
             <div
-              className="asm-modal"
+              className={`asm-modal${workoutExiting ? ' asm-modal--exit' : ''}`}
               role="dialog"
               aria-modal="true"
               aria-labelledby="asm-modal-title"
+              onAnimationEnd={handleWorkoutExitEnd}
             >
               <div className="asm-modal__head">
                 <button
                   type="button"
                   className="asm-modal__close"
-                  onClick={closeWorkout}
+                  onClick={requestCloseWorkout}
                   aria-label="Закрыть"
                 >
                   ×
                 </button>
                 <h2 id="asm-modal-title" className="asm-modal__title">
-                  {workout.blockMode
-                    ? `Блок: задание ${workout.blockMode.index + 1} из ${workout.blockMode.tasks.length}`
+                  {displayWorkout.blockMode
+                    ? `Блок: задание ${displayWorkout.blockMode.index + 1} из ${displayWorkout.blockMode.tasks.length}`
                     : 'Задание'}
                 </h2>
-                {workout.notice ? (
-                  <p className="asm-modal__notice">{workout.notice}</p>
+                {displayWorkout.notice ? (
+                  <p className="asm-modal__notice">{displayWorkout.notice}</p>
                 ) : null}
               </div>
 
-              {workout.done && workout.result ? (
+              {displayWorkout.done && displayWorkout.result ? (
                 <>
                   <div className="asm-modal__body">
                     <p className="asm-result-line">
-                      {workout.result.correct ? (
+                      {displayWorkout.result.correct ? (
                         <strong style={{ color: '#2e7d32' }}>Верно!</strong>
                       ) : (
                         <>
                           <strong>Пока неверно.</strong>
-                          {workout.result.expected_answer != null ? (
+                          {displayWorkout.result.expected_answer != null ? (
                             <>
                               <br />
                               Ожидалось:{' '}
-                              {String(workout.result.expected_answer)}
+                              {String(displayWorkout.result.expected_answer)}
                             </>
                           ) : null}
                         </>
                       )}
                     </p>
-                    {workout.result.grade_2_5 != null ? (
+                    {displayWorkout.result.grade_2_5 != null ? (
                       <p className="asm-result-line" style={{ marginBottom: 8 }}>
-                        <strong>Оценка за задание: {workout.result.grade_2_5}</strong>
+                        <strong>Оценка за задание: {displayWorkout.result.grade_2_5}</strong>
                       </p>
                     ) : null}
-                    {workout.result.block_grade_2_5 != null ? (
+                    {displayWorkout.result.block_grade_2_5 != null ? (
                       <p className="asm-result-line" style={{ marginBottom: 8 }}>
-                        <strong>Оценка за блок: {workout.result.block_grade_2_5}</strong>
+                        <strong>Оценка за блок: {displayWorkout.result.block_grade_2_5}</strong>
                       </p>
                     ) : null}
                     <p className="asm-result-stats">
-                      Изменение баланса: монеты {workout.result.coins_awarded ?? 0}, XP{' '}
-                      {workout.result.xp_awarded ?? 0}
+                      Изменение баланса: монеты {displayWorkout.result.coins_awarded ?? 0}, XP{' '}
+                      {displayWorkout.result.xp_awarded ?? 0}
                     </p>
                   </div>
                   <div className="asm-modal__footer">
                     <button
                       type="button"
                       className="asm-footer-primary"
-                      onClick={closeWorkout}
+                      onClick={requestCloseWorkout}
                     >
                       Закрыть
                     </button>
@@ -403,19 +473,114 @@ export default function AssignmentsPage() {
               ) : (
                 <form className="asm-modal__form" onSubmit={submitAnswer}>
                   <div className="asm-modal__body">
-                    <p className="asm-modal__task">{workout.prompt}</p>
+                    <p className="asm-modal__task">{displayWorkout.prompt}</p>
                     {workErr ? (
                       <p className="asm-modal__err">{workErr}</p>
                     ) : null}
-                    {workout.ui_mode === 'asgard_mc' &&
-                    workout.choices &&
-                    workout.choices.length > 0 ? (
+                    {displayWorkout.ui_mode === 'terminal_io' && displayWorkout.task_payload ? (
+                      <div className="asm-terminal">
+                        {displayWorkout.task_payload.story ? (
+                          <p className="asm-modal__task asm-terminal-story">
+                            {String(displayWorkout.task_payload.story)}
+                          </p>
+                        ) : null}
+                        {displayWorkout.task_payload.requirements ? (
+                          <p className="asm-terminal-req">{String(displayWorkout.task_payload.requirements)}</p>
+                        ) : null}
+                        <label htmlFor="asm-terminal-code" className="asm-terminal-label">
+                          Программа (Python)
+                        </label>
+                        <textarea
+                          id="asm-terminal-code"
+                          className="asm-terminal-code"
+                          spellCheck={false}
+                          rows={12}
+                          value={terminalCode}
+                          onChange={(e) => setTerminalCode(e.target.value)}
+                          placeholder="# input(), print()"
+                        />
+                        <p className="asm-terminal-hint">
+                          Проверка: {displayWorkout.task_payload.tests?.length ?? 0} тест(ов) на сервере.
+                        </p>
+                      </div>
+                    ) : displayWorkout.ui_mode === 'dragdrop' && displayWorkout.task_payload ? (
+                      <div className="asm-dragdrop">
+                        <p className="asm-dragdrop-hint">
+                          Перетащите карточки в области или выберите из списка под каждой областью.
+                        </p>
+                        <div className="asm-dragdrop-pool">
+                          {(displayWorkout.task_payload.items || []).map((it) => {
+                            const used = Object.values(dragPlaced).includes(it.id)
+                            if (used) return null
+                            return (
+                              <div
+                                key={it.id}
+                                role="button"
+                                tabIndex={0}
+                                draggable
+                                onDragStart={() => setDragActive(it.id)}
+                                className="asm-drag-card"
+                              >
+                                {String(it.text ?? it.id)}
+                              </div>
+                            )
+                          })}
+                        </div>
+                        <div className="asm-dragdrop-slots">
+                          {(displayWorkout.task_payload.slots || []).map((slot) => (
+                            <div key={slot.id} className="asm-drag-slot-wrap">
+                              <div className="asm-drag-slot-label">{String(slot.label ?? slot.id)}</div>
+                              <div
+                                className="asm-drag-slot"
+                                onDragOver={(e) => e.preventDefault()}
+                                onDrop={(e) => {
+                                  e.preventDefault()
+                                  if (dragActive) {
+                                    setDragPlaced((p) => ({ ...p, [slot.id]: dragActive }))
+                                    setDragActive(null)
+                                  }
+                                }}
+                              >
+                                {dragPlaced[slot.id] ? (
+                                  <span className="asm-drag-card asm-drag-card--in">
+                                    {String(
+                                      (displayWorkout.task_payload.items || []).find(
+                                        (x) => x.id === dragPlaced[slot.id],
+                                      )?.text ?? dragPlaced[slot.id],
+                                    )}
+                                  </span>
+                                ) : (
+                                  <span className="asm-drag-placeholder">Сюда</span>
+                                )}
+                              </div>
+                              <select
+                                className="asm-drag-select"
+                                value={dragPlaced[slot.id] || ''}
+                                onChange={(e) => {
+                                  const v = e.target.value
+                                  setDragPlaced((p) => ({ ...p, [slot.id]: v }))
+                                }}
+                              >
+                                <option value="">—</option>
+                                {(displayWorkout.task_payload.items || []).map((it) => (
+                                  <option key={it.id} value={it.id}>
+                                    {String(it.text ?? it.id)}
+                                  </option>
+                                ))}
+                              </select>
+                            </div>
+                          ))}
+                        </div>
+                      </div>
+                    ) : displayWorkout.ui_mode === 'asgard_mc' &&
+                      displayWorkout.choices &&
+                      displayWorkout.choices.length > 0 ? (
                       <div>
                         <span className="asm-choices-label">
                           Выберите вариант
                         </span>
                         <div className="asm-choices">
-                          {dedupeChoices(workout.choices).map((c, idx) => {
+                          {dedupeChoices(displayWorkout.choices).map((c, idx) => {
                             const cid = c.choice_id ?? c.choiceId
                             const idStr =
                               cid != null ? String(cid) : `idx-${idx}`
@@ -458,7 +623,7 @@ export default function AssignmentsPage() {
                     <button
                       type="button"
                       className="asm-footer-secondary"
-                      onClick={closeWorkout}
+                      onClick={requestCloseWorkout}
                     >
                       Отмена
                     </button>
