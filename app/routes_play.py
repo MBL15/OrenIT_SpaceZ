@@ -22,7 +22,7 @@ from app.models import (
     Wallet,
 )
 from app.schemas import BuyBody, EquipBody
-from app.services import level_from_total_xp
+from app.services import ensure_user_economy_rows, level_from_total_xp
 
 play_router = APIRouter(tags=["play"])
 
@@ -126,7 +126,11 @@ def get_wallet(
         raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Only students")
     w = db.get(Wallet, user.id)
     if not w:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="No wallet")
+        ensure_user_economy_rows(db, user.id)
+        db.commit()
+        w = db.get(Wallet, user.id)
+    if not w:
+        raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail="Wallet unavailable")
     return w
 
 

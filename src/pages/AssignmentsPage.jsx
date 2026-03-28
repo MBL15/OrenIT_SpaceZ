@@ -1,9 +1,38 @@
 import { useCallback, useEffect, useState } from 'react'
+import { createPortal } from 'react-dom'
 import { Link, Navigate } from 'react-router-dom'
 import { apiFetch, parseErrorDetail } from '../api.js'
 import { useAuth } from '../AuthContext.jsx'
-import '../components/MainSite.css'
-import './ClassPage.css'
+import './AssignmentsPage.css'
+
+function safeText(v) {
+  if (v == null) return ''
+  return String(v)
+}
+
+function rewardLine(row) {
+  const c = Number(row.reward_coins) || 0
+  const x = Number(row.reward_xp) || 0
+  const bits = []
+  bits.push(c > 0 ? `${c} мон.` : 'без монет')
+  if (x > 0) bits.push(`${x} XP`)
+  return bits.join(' · ')
+}
+
+/** Убирает дубликаты по choice_id (иногда в ответе API повторяется вариант). */
+function dedupeChoices(choices) {
+  if (!Array.isArray(choices)) return []
+  const seen = new Set()
+  const out = []
+  for (let i = 0; i < choices.length; i++) {
+    const c = choices[i]
+    const id = String(c.choice_id ?? c.choiceId ?? i)
+    if (seen.has(id)) continue
+    seen.add(id)
+    out.push(c)
+  }
+  return out
+}
 
 export default function AssignmentsPage() {
   const { user } = useAuth()
@@ -13,6 +42,7 @@ export default function AssignmentsPage() {
   const [workout, setWorkout] = useState(null)
   const [answer, setAnswer] = useState('')
   const [workErr, setWorkErr] = useState('')
+  const [startErr, setStartErr] = useState('')
   const [submitting, setSubmitting] = useState(false)
 
   const load = useCallback(async () => {
@@ -36,31 +66,72 @@ export default function AssignmentsPage() {
     if (user?.role === 'child') load()
   }, [user?.role, load])
 
+  useEffect(() => {
+    if (!workout) return
+    const prev = document.body.style.overflow
+    document.body.style.overflow = 'hidden'
+    return () => {
+      document.body.style.overflow = prev
+    }
+  }, [workout])
+
   if (user?.role !== 'child') {
     return <Navigate to="/app" replace />
   }
 
-  const startTask = async (taskTemplateId) => {
+  const startTask = async (taskTemplateId, assignmentId, blockMode = null) => {
     setWorkErr('')
+    setStartErr('')
     setAnswer('')
-    const res = await apiFetch(`/practice/start/${taskTemplateId}`, {
+    const q =
+      assignmentId != null
+        ? `?assignment_id=${encodeURIComponent(String(assignmentId))}`
+        : ''
+    const res = await apiFetch(`/practice/start/${taskTemplateId}${q}`, {
       method: 'POST',
     })
     const data = await res.json().catch(() => ({}))
     if (!res.ok) {
-      setWorkErr(parseErrorDetail(data))
+      setStartErr(parseErrorDetail(data))
+      return
+    }
+    const instanceId = data.instance_id ?? data.instanceId
+    if (instanceId == null || instanceId === '') {
+      setStartErr('Сервер не вернул номер задания. Обновите страницу.')
       return
     }
     setWorkout({
       templateId: taskTemplateId,
-      instanceId: data.instance_id,
+      instanceId,
       prompt: data.prompt || '',
+      ui_mode: data.ui_mode ?? null,
+      choices: Array.isArray(data.choices) ? data.choices : null,
+      notice: data.notice ?? null,
+      blockMode,
+    })
+  }
+
+  const startBlock = (row) => {
+    if (!row.tasks?.length) return
+    const first = row.tasks[0]
+    startTask(first.task_template_id, first.assignment_id, {
+      blockId: row.block_id,
+      tasks: row.tasks,
+      index: 0,
     })
   }
 
   const submitAnswer = async (e) => {
     e.preventDefault()
     if (!workout) return
+    if (
+      workout.ui_mode === 'asgard_mc' &&
+      workout.choices?.length > 0 &&
+      !answer.trim()
+    ) {
+      setWorkErr('Выберите вариант ответа')
+      return
+    }
     setWorkErr('')
     setSubmitting(true)
     try {
@@ -73,9 +144,50 @@ export default function AssignmentsPage() {
         setWorkErr(parseErrorDetail(data))
         return
       }
-      setWorkout((w) =>
-        w ? { ...w, result: data, done: true } : w,
-      )
+      const bm = workout.blockMode
+      if (bm && !data.correct) {
+        setWorkout((w) => (w ? { ...w, result: data, done: true } : w))
+        await load()
+        return
+      }
+      if (
+        bm &&
+        data.correct &&
+        bm.index < bm.tasks.length - 1
+      ) {
+        const nextIdx = bm.index + 1
+        const next = bm.tasks[nextIdx]
+        setAnswer('')
+        setWorkErr('')
+        const q = `?assignment_id=${encodeURIComponent(String(next.assignment_id))}`
+        const res2 = await apiFetch(`/practice/start/${next.task_template_id}${q}`, {
+          method: 'POST',
+        })
+        const data2 = await res2.json().catch(() => ({}))
+        if (!res2.ok) {
+          setWorkErr(parseErrorDetail(data2))
+          setWorkout((w) => (w ? { ...w, result: data, done: true } : w))
+          return
+        }
+        const instanceId = data2.instance_id ?? data2.instanceId
+        if (instanceId == null || instanceId === '') {
+          setWorkErr('Сервер не вернул номер задания.')
+          setWorkout((w) => (w ? { ...w, result: data, done: true } : w))
+          return
+        }
+        setWorkout({
+          templateId: next.task_template_id,
+          instanceId,
+          prompt: data2.prompt || '',
+          ui_mode: data2.ui_mode ?? null,
+          choices: Array.isArray(data2.choices) ? data2.choices : null,
+          notice: data2.notice ?? null,
+          blockMode: { ...bm, index: nextIdx },
+        })
+        await load()
+        return
+      }
+      setWorkout((w) => (w ? { ...w, result: data, done: true } : w))
       await load()
     } finally {
       setSubmitting(false)
@@ -86,174 +198,277 @@ export default function AssignmentsPage() {
     setWorkout(null)
     setAnswer('')
     setWorkErr('')
+    setStartErr('')
+  }
+
+  const overlayMouseDown = (e) => {
+    if (e.target === e.currentTarget && workout?.done) closeWorkout()
   }
 
   return (
-    <div className="cp-wrap">
-      <div className="cp-panel">
-        <header className="cp-top">
-          <div>
-            <Link className="cp-back" to="/app">
-              ← К разделам
-            </Link>
-            <h1 className="cp-title">Задания от учителя</h1>
-            <p className="cp-sub">
-              Задания по классам, в которые вы вступили по коду приглашения
-            </p>
-          </div>
+    <div className="asm-page">
+      <div className="asm-shell">
+        <Link className="asm-back" to="/app">
+          ← К разделам
+        </Link>
+
+        <header className="asm-hero">
+          <h1 className="asm-title">Задания от учителя</h1>
+          <p className="asm-lead">
+            Задания по классам, в которые вы вступили по коду приглашения. За
+            верное решение начисляются монеты — их можно потратить в профиле в
+            магазине скинов.
+          </p>
         </header>
 
-        <div style={{ padding: '20px 24px 32px' }}>
-          {loading ? (
-            <p className="cp-sub">Загрузка…</p>
-          ) : loadErr ? (
-            <p className="space-form-error">{loadErr}</p>
-          ) : rows.length === 0 ? (
-            <p className="cp-teacher-muted">
-              Пока нет назначенных заданий. Вступите в класс по коду на странице
-              «Мой класс».
-            </p>
-          ) : (
-            <ul
-              style={{
-                listStyle: 'none',
-                margin: 0,
-                padding: 0,
-                display: 'flex',
-                flexDirection: 'column',
-                gap: 12,
-              }}
-            >
-              {rows.map((a) => (
-                <li
-                  key={a.assignment_id}
-                  className="cp-section"
-                  style={{ overflow: 'hidden' }}
-                >
-                  <div className="cp-section-head">
-                    <h2 className="cp-section-title">{a.lesson_title}</h2>
-                    <p className="cp-section-hint">
-                      Класс: {a.class_name}
-                      {a.task_title ? ` · ${a.task_title}` : ''}
+        {startErr ? <p className="asm-alert">{startErr}</p> : null}
+
+        {loading ? (
+          <p className="asm-lead" style={{ marginTop: 8 }}>
+            Загрузка…
+          </p>
+        ) : loadErr ? (
+          <p className="asm-alert">{loadErr}</p>
+        ) : rows.length === 0 ? (
+          <p className="asm-empty">
+            Пока нет назначенных заданий. Вступите в класс по коду на странице
+            «Мой класс».
+          </p>
+        ) : (
+          <ul className="asm-list">
+            {rows.map((a) =>
+              a.kind === 'block' && Array.isArray(a.tasks) && a.tasks.length > 0 ? (
+                <li key={`block-${a.block_id}`} className="asm-card">
+                  <div className="asm-card__main">
+                    <h2 className="asm-card__lesson">Блок заданий</h2>
+                    <p className="asm-card__task" style={{ marginTop: 6 }}>
+                      {a.tasks.length} заданий
                     </p>
-                  </div>
-                  <div style={{ padding: '14px 18px' }}>
+                    <ol
+                      className="asm-block-task-list"
+                      style={{ margin: '8px 0 0', paddingLeft: 20, fontSize: 14 }}
+                    >
+                      {a.tasks.map((t) => (
+                        <li key={t.assignment_id}>
+                          <span className="asm-card__lesson" style={{ fontSize: '1em' }}>
+                            {safeText(t.lesson_title)}
+                          </span>
+                          {t.task_title ? (
+                            <span> — {safeText(t.task_title)}</span>
+                          ) : null}
+                        </li>
+                      ))}
+                    </ol>
+                    <div className="asm-card__row">
+                      <span className="asm-badge">{safeText(a.class_name)}</span>
+                      <span className="asm-badge asm-badge--reward">
+                        {rewardLine(a)}
+                      </span>
+                      {a.bonus_claimed ? (
+                        <span className="asm-badge asm-badge--done">
+                          бонус получен
+                        </span>
+                      ) : null}
+                    </div>
                     {a.note ? (
-                      <p className="cp-teacher-muted" style={{ marginTop: 0 }}>
-                        {a.note}
-                      </p>
+                      <p className="asm-card__note">{safeText(a.note)}</p>
                     ) : null}
+                  </div>
+                  <div className="asm-card__action">
                     <button
                       type="button"
-                      className="space-btn space-btn--primary"
-                      onClick={() => startTask(a.task_template_id)}
+                      className="asm-btn"
+                      onClick={() => startBlock(a)}
                     >
-                      Решить задание
+                      {a.bonus_claimed ? 'Повторить блок' : 'Решить блок'}
                     </button>
                   </div>
                 </li>
-              ))}
-            </ul>
-          )}
-        </div>
+              ) : (
+                <li key={a.assignment_id} className="asm-card">
+                  <div className="asm-card__main">
+                    <h2 className="asm-card__lesson">{safeText(a.lesson_title)}</h2>
+                    {a.task_title ? (
+                      <p className="asm-card__task">{safeText(a.task_title)}</p>
+                    ) : null}
+                    <div className="asm-card__row">
+                      <span className="asm-badge">{safeText(a.class_name)}</span>
+                      <span className="asm-badge asm-badge--reward">
+                        {rewardLine(a)}
+                      </span>
+                      {a.bonus_claimed ? (
+                        <span className="asm-badge asm-badge--done">
+                          бонус получен
+                        </span>
+                      ) : null}
+                    </div>
+                    {a.note ? (
+                      <p className="asm-card__note">{safeText(a.note)}</p>
+                    ) : null}
+                  </div>
+                  <div className="asm-card__action">
+                    <button
+                      type="button"
+                      className="asm-btn"
+                      onClick={() =>
+                        startTask(a.task_template_id, a.assignment_id)
+                      }
+                    >
+                      {a.bonus_claimed ? 'Повторить задание' : 'Решить задание'}
+                    </button>
+                  </div>
+                </li>
+              ),
+            )}
+          </ul>
+        )}
       </div>
 
-      {workout && (
-        <div
-          className="ms-product-drawer-backdrop"
-          role="presentation"
-          style={{ zIndex: 50 }}
-          onClick={workout.done ? closeWorkout : undefined}
-        >
-          <aside
-            className="ms-product-drawer"
-            role="dialog"
-            aria-modal="true"
-            aria-labelledby="assign-work-title"
-            onClick={(e) => e.stopPropagation()}
-            style={{ maxWidth: 480 }}
+      {workout &&
+        createPortal(
+          <div
+            className="asm-overlay"
+            role="presentation"
+            onMouseDown={overlayMouseDown}
           >
-            <button
-              type="button"
-              className="ms-modal-close"
-              onClick={closeWorkout}
-              aria-label="Закрыть"
+            <div
+              className="asm-modal"
+              role="dialog"
+              aria-modal="true"
+              aria-labelledby="asm-modal-title"
             >
-              ×
-            </button>
-            <h2 id="assign-work-title" className="ms-product-drawer-title">
-              Задание
-            </h2>
-            {workout.done && workout.result ? (
-              <div>
-                <p className="ms-product-drawer-text">
-                  {workout.result.correct ? (
-                    <strong style={{ color: '#2e7d32' }}>Верно!</strong>
-                  ) : (
-                    <>
-                      <strong>Пока неверно.</strong>
-                      {workout.result.expected_answer != null ? (
-                        <>
-                          <br />
-                          Ожидалось: {String(workout.result.expected_answer)}
-                        </>
-                      ) : null}
-                    </>
-                  )}
-                </p>
-                <p className="ms-product-drawer-text" style={{ fontSize: 14 }}>
-                  Начислено монет: {workout.result.currency_awarded ?? 0}, баллов:{' '}
-                  {workout.result.score_awarded ?? 0}
-                </p>
+              <div className="asm-modal__head">
                 <button
                   type="button"
-                  className="ms-modal-cta"
+                  className="asm-modal__close"
                   onClick={closeWorkout}
+                  aria-label="Закрыть"
                 >
-                  Закрыть
+                  ×
                 </button>
+                <h2 id="asm-modal-title" className="asm-modal__title">
+                  {workout.blockMode
+                    ? `Блок: задание ${workout.blockMode.index + 1} из ${workout.blockMode.tasks.length}`
+                    : 'Задание'}
+                </h2>
+                {workout.notice ? (
+                  <p className="asm-modal__notice">{workout.notice}</p>
+                ) : null}
               </div>
-            ) : (
-              <>
-                <p className="ms-product-drawer-text" style={{ whiteSpace: 'pre-wrap' }}>
-                  {workout.prompt}
-                </p>
-                <form onSubmit={submitAnswer}>
-                  {workErr ? (
-                    <p className="space-form-error">{workErr}</p>
-                  ) : null}
-                  <label className="cp-teacher-label" style={{ marginBottom: 12 }}>
-                    Ответ
-                    <input
-                      className="space-input"
-                      value={answer}
-                      onChange={(e) => setAnswer(e.target.value)}
-                      autoFocus
-                      required
-                    />
-                  </label>
-                  <div className="ms-product-drawer-actions">
+
+              {workout.done && workout.result ? (
+                <>
+                  <div className="asm-modal__body">
+                    <p className="asm-result-line">
+                      {workout.result.correct ? (
+                        <strong style={{ color: '#2e7d32' }}>Верно!</strong>
+                      ) : (
+                        <>
+                          <strong>Пока неверно.</strong>
+                          {workout.result.expected_answer != null ? (
+                            <>
+                              <br />
+                              Ожидалось:{' '}
+                              {String(workout.result.expected_answer)}
+                            </>
+                          ) : null}
+                        </>
+                      )}
+                    </p>
+                    {workout.result.grade_2_5 != null ? (
+                      <p className="asm-result-line" style={{ marginBottom: 8 }}>
+                        <strong>Оценка за задание: {workout.result.grade_2_5}</strong>
+                      </p>
+                    ) : null}
+                    {workout.result.block_grade_2_5 != null ? (
+                      <p className="asm-result-line" style={{ marginBottom: 8 }}>
+                        <strong>Оценка за блок: {workout.result.block_grade_2_5}</strong>
+                      </p>
+                    ) : null}
+                    <p className="asm-result-stats">
+                      Изменение баланса: монеты {workout.result.coins_awarded ?? 0}, XP{' '}
+                      {workout.result.xp_awarded ?? 0}
+                    </p>
+                  </div>
+                  <div className="asm-modal__footer">
+                    <button
+                      type="button"
+                      className="asm-footer-primary"
+                      onClick={closeWorkout}
+                    >
+                      Закрыть
+                    </button>
+                  </div>
+                </>
+              ) : (
+                <form className="asm-modal__form" onSubmit={submitAnswer}>
+                  <div className="asm-modal__body">
+                    <p className="asm-modal__task">{workout.prompt}</p>
+                    {workErr ? (
+                      <p className="asm-modal__err">{workErr}</p>
+                    ) : null}
+                    {workout.ui_mode === 'asgard_mc' &&
+                    workout.choices &&
+                    workout.choices.length > 0 ? (
+                      <div>
+                        <span className="asm-choices-label">
+                          Выберите вариант
+                        </span>
+                        <div className="asm-choices">
+                          {dedupeChoices(workout.choices).map((c, idx) => {
+                            const cid = c.choice_id ?? c.choiceId
+                            const idStr =
+                              cid != null ? String(cid) : `idx-${idx}`
+                            return (
+                              <button
+                                key={`ch-${idStr}`}
+                                type="button"
+                                className={`asm-choice${answer === idStr ? ' asm-choice--on' : ''}`}
+                                onClick={() => setAnswer(idStr)}
+                              >
+                                {c.text != null ? String(c.text) : ''}
+                              </button>
+                            )
+                          })}
+                        </div>
+                      </div>
+                    ) : (
+                      <div className="asm-field">
+                        <label htmlFor="asm-answer">Ответ</label>
+                        <input
+                          id="asm-answer"
+                          className="asm-input"
+                          value={answer}
+                          onChange={(e) => setAnswer(e.target.value)}
+                          autoComplete="off"
+                          autoFocus
+                          required
+                        />
+                      </div>
+                    )}
+                  </div>
+                  <div className="asm-modal__footer">
                     <button
                       type="submit"
-                      className="ms-modal-cta"
+                      className="asm-footer-primary"
                       disabled={submitting}
                     >
                       {submitting ? 'Проверка…' : 'Проверить'}
                     </button>
                     <button
                       type="button"
-                      className="ms-modal-secondary"
+                      className="asm-footer-secondary"
                       onClick={closeWorkout}
                     >
                       Отмена
                     </button>
                   </div>
                 </form>
-              </>
-            )}
-          </aside>
-        </div>
-      )}
+              )}
+            </div>
+          </div>,
+          document.body,
+        )}
     </div>
   )
 }

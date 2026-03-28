@@ -26,13 +26,52 @@ def _now_iso() -> str:
     return datetime.now(timezone.utc).replace(microsecond=0).isoformat()
 
 
+# Единая учётная запись администратора (глобальная роль в БД, не локальный мок).
+DEFAULT_ADMIN_LOGIN = "admin"
+DEFAULT_ADMIN_PASSWORD = "admin"
+
+
+def sync_default_admin_password(db: Session) -> None:
+    """Перезаписывает пароль пользователя admin (роль admin) на DEFAULT_ADMIN_PASSWORD."""
+    u = (
+        db.query(User)
+        .filter(User.login == DEFAULT_ADMIN_LOGIN, User.role == "admin")
+        .first()
+    )
+    if not u:
+        return
+    u.password_hash = hash_password(DEFAULT_ADMIN_PASSWORD)
+    db.commit()
+
+
+def ensure_admin_exists(db: Session) -> None:
+    """Если в базе нет ни одного пользователя с ролью admin — создаёт учётку."""
+    if db.query(User).filter(User.role == "admin").first() is not None:
+        return
+    login = DEFAULT_ADMIN_LOGIN
+    if db.query(User).filter(User.login == login).first() is not None:
+        login = "orenit_admin"
+    u = User(
+        login=login,
+        password_hash=hash_password(DEFAULT_ADMIN_PASSWORD),
+        role="admin",
+        display_name="Администратор",
+        avatar_id=None,
+        created_at=_now_iso(),
+    )
+    db.add(u)
+    db.flush()
+    ensure_user_economy_rows(db, u.id)
+    db.commit()
+
+
 def seed_if_empty(db: Session) -> None:
     if db.query(User).first() is not None:
         return
 
     admin = User(
-        login="admin",
-        password_hash=hash_password("admin"),
+        login=DEFAULT_ADMIN_LOGIN,
+        password_hash=hash_password(DEFAULT_ADMIN_PASSWORD),
         role="admin",
         display_name="Администратор",
         avatar_id=None,

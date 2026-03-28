@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+import math
 import random
 import re
 from datetime import datetime, timezone
@@ -10,6 +11,7 @@ from sqlalchemy import func
 from sqlalchemy.orm import Session
 
 from app.models import (
+    ClassTaskAssignment,
     CurrencyTransaction,
     Lesson,
     LessonProgress,
@@ -254,6 +256,137 @@ def published_lesson_ids(db: Session) -> list[int]:
         .order_by(Lesson.sort_order)
         .all()
     ]
+
+
+def grade_2_to_5_from_wrong_attempts(wrong_attempts: int) -> int:
+    """Оценка 2–5: 0 ошибок→5, 1→4, 2→3, 3 и более→2 (минимум 2)."""
+    return max(2, 5 - wrong_attempts)
+
+
+def assignment_attempt_counts(
+    db: Session, user_id: int, assignment_id: int
+) -> tuple[int, int, int]:
+    """Число попыток по назначению: всего, неверных, верных."""
+    inst_ids = [
+        r[0]
+        for r in db.query(TaskInstance.id)
+        .filter(
+            TaskInstance.assignment_id == assignment_id,
+            TaskInstance.user_id == user_id,
+        )
+        .all()
+    ]
+    if not inst_ids:
+        return 0, 0, 0
+    total = (
+        db.query(func.count(TaskAttempt.id))
+        .filter(TaskAttempt.task_instance_id.in_(inst_ids))
+        .scalar()
+        or 0
+    )
+    wrong = (
+        db.query(func.count(TaskAttempt.id))
+        .filter(
+            TaskAttempt.task_instance_id.in_(inst_ids),
+            TaskAttempt.is_correct.is_(False),
+        )
+        .scalar()
+        or 0
+    )
+    correct = (
+        db.query(func.count(TaskAttempt.id))
+        .filter(
+            TaskAttempt.task_instance_id.in_(inst_ids),
+            TaskAttempt.is_correct.is_(True),
+        )
+        .scalar()
+        or 0
+    )
+    return int(total), int(wrong), int(correct)
+
+
+def grade_for_assignment(db: Session, user_id: int, assignment_id: int) -> int:
+    """Оценка 2–5 по числу неверных попыток по всем экземплярам этого назначения."""
+    inst_ids = [
+        r[0]
+        for r in db.query(TaskInstance.id)
+        .filter(
+            TaskInstance.assignment_id == assignment_id,
+            TaskInstance.user_id == user_id,
+        )
+        .all()
+    ]
+    if not inst_ids:
+        return grade_2_to_5_from_wrong_attempts(0)
+    wrong = (
+        db.query(func.count(TaskAttempt.id))
+        .filter(
+            TaskAttempt.task_instance_id.in_(inst_ids),
+            TaskAttempt.is_correct.is_(False),
+        )
+        .scalar()
+    )
+    return grade_2_to_5_from_wrong_attempts(int(wrong or 0))
+
+
+def block_assignment_ids_ordered(db: Session, block_id: int) -> list[int]:
+    rows = (
+        db.query(ClassTaskAssignment.id)
+        .filter(ClassTaskAssignment.block_id == block_id)
+        .order_by(ClassTaskAssignment.id.asc())
+        .all()
+    )
+    return [r[0] for r in rows]
+
+
+def block_grade_ceil_mean(db: Session, user_id: int, block_id: int) -> int | None:
+    """Среднее арифметическое оценок по заданиям блока, округление вверх."""
+    aids = block_assignment_ids_ordered(db, block_id)
+    if not aids:
+        return None
+    grades = [grade_for_assignment(db, user_id, aid) for aid in aids]
+    return int(math.ceil(sum(grades) / len(grades)))
+
+
+def block_all_other_tasks_solved_correctly(
+    db: Session, user_id: int, block_id: int, current_assignment_id: int
+) -> bool:
+    """У всех заданий блока, кроме текущего, уже есть верная попытка (для выдачи бонуса за блок на последней задаче)."""
+    aids = block_assignment_ids_ordered(db, block_id)
+    for aid in aids:
+        if aid == current_assignment_id:
+            continue
+        ok = (
+            db.query(TaskAttempt.id)
+            .join(TaskInstance, TaskAttempt.task_instance_id == TaskInstance.id)
+            .filter(
+                TaskInstance.assignment_id == aid,
+                TaskInstance.user_id == user_id,
+                TaskAttempt.is_correct.is_(True),
+            )
+            .first()
+        )
+        if not ok:
+            return False
+    return True
+
+
+def block_every_task_has_correct_attempt(db: Session, user_id: int, block_id: int) -> bool:
+    aids = block_assignment_ids_ordered(db, block_id)
+    for aid in aids:
+        ok = (
+            db.query(TaskAttempt.id)
+            .join(TaskInstance, TaskAttempt.task_instance_id == TaskInstance.id)
+            .filter(
+                TaskInstance.assignment_id == aid,
+                TaskInstance.user_id == user_id,
+                TaskAttempt.is_correct.is_(True),
+            )
+            .first()
+        )
+        if not ok:
+            return False
+    return True
 
 
 # --- new user rows ---

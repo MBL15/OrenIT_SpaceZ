@@ -4,8 +4,15 @@ import { apiFetch, parseErrorDetail } from '../api.js'
 import { useAuth } from '../AuthContext.jsx'
 import './ClassPage.css'
 
+function hwStatusLabel(status) {
+  if (status === 'completed') return 'Верно решено'
+  if (status === 'in_progress') return 'Пока без верного ответа'
+  return 'Не начинал'
+}
+
 export default function TeacherCabinetPage() {
   const { user } = useAuth()
+  const [cabinetTab, setCabinetTab] = useState('class')
   const [classes, setClasses] = useState([])
   const [selectedId, setSelectedId] = useState(null)
   const [newClassName, setNewClassName] = useState('')
@@ -16,11 +23,22 @@ export default function TeacherCabinetPage() {
   const [lessons, setLessons] = useState([])
   const [lessonDetail, setLessonDetail] = useState(null)
   const [pickLessonId, setPickLessonId] = useState('')
-  const [pickTaskId, setPickTaskId] = useState('')
+  /** Блок заданий: можно накопить задачи из разных уроков, затем назначить одним запросом */
+  const [batchTasks, setBatchTasks] = useState([])
   const [assignNote, setAssignNote] = useState('')
+  const [assignRewardCoins, setAssignRewardCoins] = useState('25')
+  const [assignRewardXp, setAssignRewardXp] = useState('0')
   const [banner, setBanner] = useState('')
   const [err, setErr] = useState('')
   const [pending, setPending] = useState(false)
+
+  const [hwHistory, setHwHistory] = useState([])
+  const [hwLoading, setHwLoading] = useState(false)
+  const [hwErr, setHwErr] = useState('')
+  const [hwSelected, setHwSelected] = useState(null)
+  const [hwProgress, setHwProgress] = useState([])
+  const [hwProgressLoading, setHwProgressLoading] = useState(false)
+  const [hwProgressErr, setHwProgressErr] = useState('')
 
   const loadClasses = useCallback(async () => {
     const res = await apiFetch('/teacher/classes')
@@ -79,9 +97,65 @@ export default function TeacherCabinetPage() {
   }, [selectedId, loadClassDetails])
 
   useEffect(() => {
+    setBatchTasks([])
+  }, [selectedId])
+
+  useEffect(() => {
+    if (user?.role !== 'teacher' || cabinetTab !== 'homework') return
+    let cancelled = false
+    setHwErr('')
+    setHwLoading(true)
+    ;(async () => {
+      const res = await apiFetch('/teacher/assignments/history')
+      if (cancelled) return
+      if (!res.ok) {
+        setHwErr(parseErrorDetail(await res.json().catch(() => ({}))))
+        setHwHistory([])
+        setHwLoading(false)
+        return
+      }
+      const data = await res.json().catch(() => [])
+      setHwHistory(Array.isArray(data) ? data : [])
+      setHwLoading(false)
+    })()
+    return () => {
+      cancelled = true
+    }
+  }, [user?.role, cabinetTab])
+
+  useEffect(() => {
+    if (!hwSelected || cabinetTab !== 'homework') {
+      setHwProgress([])
+      setHwProgressErr('')
+      return
+    }
+    let cancelled = false
+    setHwProgressErr('')
+    setHwProgressLoading(true)
+    const { class_id: cid, id: aid } = hwSelected
+    ;(async () => {
+      const res = await apiFetch(
+        `/teacher/classes/${cid}/assignments/${aid}/progress`,
+      )
+      if (cancelled) return
+      if (!res.ok) {
+        setHwProgressErr(parseErrorDetail(await res.json().catch(() => ({}))))
+        setHwProgress([])
+        setHwProgressLoading(false)
+        return
+      }
+      const data = await res.json().catch(() => [])
+      setHwProgress(Array.isArray(data) ? data : [])
+      setHwProgressLoading(false)
+    })()
+    return () => {
+      cancelled = true
+    }
+  }, [hwSelected, cabinetTab])
+
+  useEffect(() => {
     if (!pickLessonId) {
       setLessonDetail(null)
-      setPickTaskId('')
       return
     }
     let cancelled = false
@@ -94,8 +168,6 @@ export default function TeacherCabinetPage() {
       }
       const d = await res.json().catch(() => null)
       setLessonDetail(d)
-      const first = d?.task_templates?.[0]?.id
-      setPickTaskId(first != null ? String(first) : '')
     })()
     return () => {
       cancelled = true
@@ -161,32 +233,60 @@ export default function TeacherCabinetPage() {
     setBanner('Код приглашения обновлён — старый код больше не действует')
   }
 
+  const toggleBatchTask = (t) => {
+    const id = t.id
+    const title = t.title || `Задача #${id}`
+    setBatchTasks((prev) => {
+      const i = prev.findIndex((x) => x.id === id)
+      if (i >= 0) return prev.filter((_, j) => j !== i)
+      return [...prev, { id, title }]
+    })
+  }
+
   const submitAssignment = async (e) => {
     e.preventDefault()
     setErr('')
     setBanner('')
-    if (!selectedId || !pickTaskId) {
-      setErr('Выберите урок и задание')
+    if (!selectedId) {
+      setErr('Выберите класс')
       return
     }
-    const task_template_id = Number(pickTaskId)
-    if (Number.isNaN(task_template_id)) return
+    const task_template_ids = batchTasks.map((x) => x.id)
+    if (task_template_ids.length === 0) {
+      setErr('Отметьте хотя бы одно задание в блоке')
+      return
+    }
+    let reward_coins = Math.min(100, Math.max(0, Math.round(Number(assignRewardCoins))))
+    let reward_xp = Math.min(1000, Math.max(0, Math.round(Number(assignRewardXp))))
+    if (Number.isNaN(reward_coins)) reward_coins = 0
+    if (Number.isNaN(reward_xp)) reward_xp = 0
     setPending(true)
     try {
-      const res = await apiFetch(`/teacher/classes/${selectedId}/assignments`, {
-        method: 'POST',
-        body: JSON.stringify({
-          task_template_id,
-          note: assignNote.trim() || null,
-        }),
-      })
+      const res = await apiFetch(
+        `/teacher/classes/${selectedId}/assignments/batch`,
+        {
+          method: 'POST',
+          body: JSON.stringify({
+            task_template_ids,
+            note: assignNote.trim() || null,
+            reward_coins,
+            reward_xp,
+          }),
+        },
+      )
       const data = await res.json().catch(() => ({}))
       if (!res.ok) {
         setErr(parseErrorDetail(data))
         return
       }
+      const n = Array.isArray(data) ? data.length : 0
       setAssignNote('')
-      setBanner('Задание назначено классу')
+      setBatchTasks([])
+      setBanner(
+        n === 1
+          ? 'Задание назначено классу'
+          : `Назначено заданий в блоке: ${n}`,
+      )
       await loadClassDetails(selectedId)
     } finally {
       setPending(false)
@@ -206,6 +306,27 @@ export default function TeacherCabinetPage() {
           <p className="cp-sub">Классы, код приглашения и задания</p>
         </header>
 
+        <div className="cp-teacher-tabs" role="tablist" aria-label="Разделы кабинета">
+          <button
+            type="button"
+            role="tab"
+            aria-selected={cabinetTab === 'class'}
+            className={`cp-teacher-tab${cabinetTab === 'class' ? ' cp-teacher-tab--on' : ''}`}
+            onClick={() => setCabinetTab('class')}
+          >
+            Класс и назначения
+          </button>
+          <button
+            type="button"
+            role="tab"
+            aria-selected={cabinetTab === 'homework'}
+            className={`cp-teacher-tab${cabinetTab === 'homework' ? ' cp-teacher-tab--on' : ''}`}
+            onClick={() => setCabinetTab('homework')}
+          >
+            Домашние задания
+          </button>
+        </div>
+
         {(banner || err) && (
           <div className="cp-teacher-alerts">
             {banner ? <p className="cp-teacher-banner">{banner}</p> : null}
@@ -213,6 +334,138 @@ export default function TeacherCabinetPage() {
           </div>
         )}
 
+        {cabinetTab === 'homework' ? (
+          <div className="cp-teacher-hw">
+            <p className="cp-teacher-hw-intro">
+              Выберите назначенное ранее задание слева — справа отобразится список учеников
+              класса. Оценка по заданию: <strong>5</strong> без ошибок,{' '}
+              <strong>4</strong> при одной ошибке, <strong>3</strong> при двух,{' '}
+              <strong>2</strong> при трёх и более (минимальная оценка 2).
+            </p>
+            {hwErr ? <p className="cp-teacher-err">{hwErr}</p> : null}
+            {hwLoading ? (
+              <p className="cp-teacher-muted">Загрузка списка…</p>
+            ) : hwHistory.length === 0 ? (
+              <p className="cp-teacher-muted">
+                Пока нет назначенных заданий. Назначьте задание во вкладке «Класс и
+                назначения».
+              </p>
+            ) : (
+              <div className="cp-teacher-hw-layout">
+                <div>
+                  <ul className="cp-teacher-hw-list">
+                    {hwHistory.map((row) => (
+                      <li key={row.id}>
+                        <button
+                          type="button"
+                          className={`cp-teacher-hw-item${hwSelected?.id === row.id ? ' cp-teacher-hw-item--on' : ''}`}
+                          onClick={() => setHwSelected(row)}
+                        >
+                          <span className="cp-teacher-hw-item-title">
+                            {row.class_name} · {row.lesson_title}
+                          </span>
+                          <span className="cp-teacher-hw-item-meta">
+                            {row.task_title || 'Задание'}
+                            {row.created_at
+                              ? ` · ${new Date(row.created_at).toLocaleString('ru-RU', { dateStyle: 'short', timeStyle: 'short' })}`
+                              : ''}
+                            <br />
+                            Награда: {row.reward_coins ?? 0} мон.
+                            {row.reward_xp ? `, ${row.reward_xp} XP` : ''}
+                          </span>
+                        </button>
+                      </li>
+                    ))}
+                  </ul>
+                </div>
+                <div className="cp-teacher-hw-panel">
+                  {!hwSelected ? (
+                    <p className="cp-teacher-muted" style={{ margin: 0 }}>
+                      Выберите задание в списке слева.
+                    </p>
+                  ) : (
+                    <>
+                      <h3>
+                        {hwSelected.class_name} —{' '}
+                        {hwSelected.task_title || hwSelected.lesson_title}
+                      </h3>
+                      {hwProgressErr ? (
+                        <p className="cp-teacher-err">{hwProgressErr}</p>
+                      ) : null}
+                      {hwProgressLoading ? (
+                        <p className="cp-teacher-muted">Загрузка…</p>
+                      ) : (
+                        <div className="cp-teacher-hw-table-wrap">
+                          <table className="cp-teacher-hw-table">
+                            <thead>
+                              <tr>
+                                <th>Ученик</th>
+                                <th>Статус</th>
+                                <th>Ошибок</th>
+                                <th>Оценка</th>
+                                <th>Всего попыток</th>
+                                <th>Бонус</th>
+                              </tr>
+                            </thead>
+                            <tbody>
+                              {hwProgress.map((p) => (
+                                <tr key={p.user_id}>
+                                  <td>
+                                    <strong>
+                                      {p.display_name || p.login}
+                                    </strong>
+                                    <span
+                                      className="cp-teacher-muted"
+                                      style={{ display: 'block', fontSize: 12 }}
+                                    >
+                                      {p.login}
+                                    </span>
+                                  </td>
+                                  <td>
+                                    <span
+                                      className={`cp-teacher-hw-badge${
+                                        p.status === 'completed'
+                                          ? ' cp-teacher-hw-badge--ok'
+                                          : p.status === 'in_progress'
+                                            ? ' cp-teacher-hw-badge--wait'
+                                            : ' cp-teacher-hw-badge--new'
+                                      }`}
+                                    >
+                                      {hwStatusLabel(p.status)}
+                                    </span>
+                                  </td>
+                                  <td>{p.wrong_attempts ?? '—'}</td>
+                                  <td>
+                                    <strong>
+                                      {p.grade != null ? p.grade : '—'}
+                                    </strong>
+                                  </td>
+                                  <td>{p.attempts}</td>
+                                  <td>
+                                    {p.bonus_claimed
+                                      ? 'получен'
+                                      : p.status === 'completed'
+                                        ? 'не получен'
+                                        : '—'}
+                                  </td>
+                                </tr>
+                              ))}
+                            </tbody>
+                          </table>
+                          {hwProgress.length === 0 && !hwProgressLoading ? (
+                            <p className="cp-teacher-muted" style={{ marginTop: 8 }}>
+                              В классе пока нет учеников.
+                            </p>
+                          ) : null}
+                        </div>
+                      )}
+                    </>
+                  )}
+                </div>
+              </div>
+            )}
+          </div>
+        ) : (
         <div className="cp-teacher-grid">
           <aside className="cp-teacher-side">
             <h2 className="cp-teacher-h2">Мои классы</h2>
@@ -316,15 +569,43 @@ export default function TeacherCabinetPage() {
                   )}
                 </section>
 
-                <section className="cp-teacher-block" aria-label="Назначить задание">
-                  <h3 className="cp-teacher-h3">Назначить задание</h3>
+                <section className="cp-teacher-block" aria-label="Назначить задания">
+                  <h3 className="cp-teacher-h3">Назначить блок заданий</h3>
                   <p className="cp-teacher-muted" style={{ marginTop: 0, marginBottom: 12 }}>
-                    Доступны только задания из опубликованных уроков — те же шаблоны, по которым
-                    ученики решают задачи на платформе.
+                    Выберите урок, отметьте одно или несколько заданий. Можно переключить урок и
+                    добавить в тот же блок задачи из другого урока — затем одним нажатием
+                    назначить весь блок классу. Доступны только шаблоны из опубликованных уроков.
                   </p>
+                  {batchTasks.length > 0 ? (
+                    <div style={{ marginBottom: 12 }}>
+                      <p className="cp-teacher-muted" style={{ margin: '0 0 6px' }}>
+                        В блоке ({batchTasks.length}):
+                      </p>
+                      <ul
+                        style={{
+                          margin: 0,
+                          paddingLeft: 18,
+                          fontSize: 13,
+                          color: '#33691e',
+                        }}
+                      >
+                        {batchTasks.map((t) => (
+                          <li key={t.id}>{t.title}</li>
+                        ))}
+                      </ul>
+                      <button
+                        type="button"
+                        className="space-btn space-btn--ghost"
+                        style={{ marginTop: 8 }}
+                        onClick={() => setBatchTasks([])}
+                      >
+                        Очистить блок
+                      </button>
+                    </div>
+                  ) : null}
                   <form className="cp-teacher-assign" onSubmit={submitAssignment}>
                     <label className="cp-teacher-label">
-                      Урок
+                      Урок (подбор задач)
                       <select
                         className="space-input"
                         value={pickLessonId}
@@ -338,22 +619,48 @@ export default function TeacherCabinetPage() {
                         ))}
                       </select>
                     </label>
-                    <label className="cp-teacher-label">
-                      Задача (шаблон)
-                      <select
-                        className="space-input"
-                        value={pickTaskId}
-                        onChange={(e) => setPickTaskId(e.target.value)}
-                        disabled={!lessonDetail?.task_templates?.length}
-                      >
-                        <option value="">—</option>
-                        {(lessonDetail?.task_templates || []).map((t) => (
-                          <option key={t.id} value={t.id}>
-                            {t.title || `Задача #${t.id}`}
-                          </option>
-                        ))}
-                      </select>
-                    </label>
+                    {lessonDetail?.task_templates?.length ? (
+                      <div className="cp-teacher-label" style={{ marginBottom: 12 }}>
+                        <span style={{ display: 'block', marginBottom: 8 }}>
+                          Задачи урока (отметьте нужные)
+                        </span>
+                        <div
+                          style={{
+                            display: 'flex',
+                            flexDirection: 'column',
+                            gap: 8,
+                            maxHeight: 220,
+                            overflowY: 'auto',
+                            padding: '10px 12px',
+                            border: '1px solid var(--cp-border, #e3e6e8)',
+                            borderRadius: 10,
+                            background: '#fafafa',
+                          }}
+                        >
+                          {(lessonDetail.task_templates || []).map((t) => (
+                            <label
+                              key={t.id}
+                              style={{
+                                display: 'flex',
+                                alignItems: 'flex-start',
+                                gap: 10,
+                                cursor: 'pointer',
+                                fontSize: 14,
+                              }}
+                            >
+                              <input
+                                type="checkbox"
+                                checked={batchTasks.some((x) => x.id === t.id)}
+                                onChange={() => toggleBatchTask(t)}
+                              />
+                              <span>{t.title || `Задача #${t.id}`}</span>
+                            </label>
+                          ))}
+                        </div>
+                      </div>
+                    ) : pickLessonId ? (
+                      <p className="cp-teacher-muted">В этом уроке нет шаблонов задач.</p>
+                    ) : null}
                     <label className="cp-teacher-label">
                       Комментарий (необязательно)
                       <input
@@ -363,12 +670,41 @@ export default function TeacherCabinetPage() {
                         maxLength={2000}
                       />
                     </label>
+                    <label className="cp-teacher-label">
+                      Монеты за верное решение (один раз на ученика)
+                      <input
+                        className="space-input"
+                        type="number"
+                        inputMode="numeric"
+                        min={0}
+                        max={100}
+                        value={assignRewardCoins}
+                        onChange={(e) => setAssignRewardCoins(e.target.value)}
+                      />
+                      <span className="cp-teacher-muted" style={{ display: 'block', marginTop: 4 }}>
+                        Начисляются на баланс в профиле — можно тратить в магазине скинов (0–100)
+                      </span>
+                    </label>
+                    <label className="cp-teacher-label">
+                      Бонус XP (необязательно)
+                      <input
+                        className="space-input"
+                        type="number"
+                        inputMode="numeric"
+                        min={0}
+                        max={1000}
+                        value={assignRewardXp}
+                        onChange={(e) => setAssignRewardXp(e.target.value)}
+                      />
+                    </label>
                     <button
                       type="submit"
                       className="space-btn space-btn--primary"
-                      disabled={pending}
+                      disabled={pending || batchTasks.length === 0}
                     >
-                      Назначить
+                      {batchTasks.length <= 1
+                        ? 'Назначить'
+                        : `Назначить блок (${batchTasks.length})`}
                     </button>
                   </form>
                 </section>
@@ -381,6 +717,11 @@ export default function TeacherCabinetPage() {
                         <span>
                           {a.lesson_title}
                           {a.task_title ? ` — ${a.task_title}` : ''}
+                        </span>
+                        <span className="cp-teacher-muted">
+                          {' '}
+                          · {a.reward_coins ?? 0} мон.
+                          {a.reward_xp ? `, ${a.reward_xp} XP` : ''}
                         </span>
                         {a.note ? (
                           <span className="cp-teacher-muted"> ({a.note})</span>
@@ -396,6 +737,7 @@ export default function TeacherCabinetPage() {
             )}
           </main>
         </div>
+        )}
       </div>
     </div>
   )

@@ -69,6 +69,37 @@ class ClassInvite(Base):
     created_at: Mapped[str] = mapped_column(String(32), nullable=False)
 
 
+class AssignmentBlock(Base):
+    """Блок заданий, выданных одним пакетом: общие комментарий и награда за весь блок."""
+
+    __tablename__ = "assignment_blocks"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    class_id: Mapped[int] = mapped_column(ForeignKey("classes.id", ondelete="CASCADE"), nullable=False)
+    teacher_id: Mapped[int] = mapped_column(ForeignKey("users.id", ondelete="CASCADE"), nullable=False)
+    note: Mapped[str | None] = mapped_column(Text, nullable=True)
+    created_at: Mapped[str] = mapped_column(String(32), nullable=False)
+    reward_coins: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
+    reward_xp: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
+
+    __table_args__ = (
+        CheckConstraint("reward_coins >= 0 AND reward_coins <= 100", name="ck_block_reward_coins"),
+        CheckConstraint("reward_xp >= 0 AND reward_xp <= 1000", name="ck_block_reward_xp"),
+    )
+
+
+class TeacherBlockRewardClaim(Base):
+    """Один раз выдать бонус учителя за весь блок (ученик + блок)."""
+
+    __tablename__ = "teacher_block_reward_claims"
+
+    user_id: Mapped[int] = mapped_column(ForeignKey("users.id", ondelete="CASCADE"), primary_key=True)
+    block_id: Mapped[int] = mapped_column(
+        ForeignKey("assignment_blocks.id", ondelete="CASCADE"), primary_key=True
+    )
+    claimed_at: Mapped[str] = mapped_column(String(32), nullable=False)
+
+
 class ClassTaskAssignment(Base):
     """Задание от учителя для всего класса (шаблон из урока)."""
 
@@ -84,6 +115,10 @@ class ClassTaskAssignment(Base):
     created_at: Mapped[str] = mapped_column(String(32), nullable=False)
     reward_coins: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
     reward_xp: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
+    block_id: Mapped[int | None] = mapped_column(
+        ForeignKey("assignment_blocks.id", ondelete="CASCADE"),
+        nullable=True,
+    )
 
     __table_args__ = (
         CheckConstraint("reward_coins >= 0 AND reward_coins <= 100", name="ck_assignment_reward_coins"),

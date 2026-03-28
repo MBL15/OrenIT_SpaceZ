@@ -53,7 +53,10 @@ def register(body: RegisterBody, db: Annotated[Session, Depends(get_db)]) -> Use
 def login(body: LoginBody, db: Annotated[Session, Depends(get_db)]) -> TokenResponse:
     user = db.query(User).filter(User.login == body.login).first()
     if not user or not verify_password(body.password, user.password_hash):
-        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Invalid credentials")
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Неверный логин или пароль",
+        )
     token = create_access_token(user.id, user.role)
     return TokenResponse(access_token=token)
 

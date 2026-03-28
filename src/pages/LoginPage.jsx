@@ -1,11 +1,6 @@
 import { useState } from 'react'
 import { Link, useNavigate, useLocation } from 'react-router-dom'
 import { useAuth } from '../AuthContext'
-import {
-  DEV_MOCK_ADMIN_LOGIN,
-  DEV_MOCK_ADMIN_PASSWORD,
-  isDevMockAdminEnabled,
-} from '../devAuthMock.js'
 
 export default function LoginPage() {
   const { login } = useAuth()
@@ -43,13 +38,6 @@ export default function LoginPage() {
         </div>
         <h1 className="space-auth-title">Вход</h1>
         <p className="space-auth-sub">Логин и пароль (как при регистрации на сервере)</p>
-        {isDevMockAdminEnabled() ? (
-          <p className="space-auth-sub space-auth-sub--mock" role="note">
-            Dev: тестовый админ без API — логин{' '}
-            <strong>{DEV_MOCK_ADMIN_LOGIN}</strong>, пароль{' '}
-            <strong>{DEV_MOCK_ADMIN_PASSWORD}</strong>
-          </p>
-        ) : null}
 
         <form className="space-form" onSubmit={handleSubmit}>
           {error && <p className="space-form-error">{error}</p>}

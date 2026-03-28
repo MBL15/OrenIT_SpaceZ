@@ -73,6 +73,45 @@
   gap: 24px;
 }
 
+.pp-block-title {
+  margin: 0;
+  font-size: 1.2rem;
+  font-weight: 800;
+  letter-spacing: -0.02em;
+  color: #1b5e20;
+}
+
+.pp-block-lead {
+  margin: 6px 0 0;
+  font-size: 14px;
+  color: var(--pp-muted);
+  line-height: 1.5;
+  max-width: 52rem;
+}
+
+.pp-journal-table {
+  font-size: 13px;
+}
+
+.pp-journal-table th,
+.pp-journal-table td {
+  vertical-align: top;
+}
+
+.pp-journal-note {
+  max-width: 14rem;
+  word-break: break-word;
+}
+
+.pp-pass-yes {
+  font-weight: 600;
+  color: #2e7d32;
+}
+
+.pp-pass-no {
+  color: #78909c;
+}
+
 .pp-note {
   margin: 0;
   padding: 12px 14px;

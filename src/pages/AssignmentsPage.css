@@ -1,0 +1,496 @@
+/* Страница «Задания от учителя» — отдельный экран + модальное окно по центру */
+
+.asm-page {
+  --asm-green: #43a047;
+  --asm-green-dark: #1b5e20;
+  --asm-green-soft: #e8f5e9;
+  --asm-page-bg: #1e2127;
+  --asm-card: #ffffff;
+  --asm-muted: #5f6368;
+  --asm-border: #e0e4e8;
+  min-height: 100svh;
+  padding: 20px 16px 48px;
+  box-sizing: border-box;
+  font-family: system-ui, -apple-system, 'Segoe UI', Roboto, 'Helvetica Neue', Arial,
+    sans-serif;
+  background:
+    radial-gradient(ellipse 90% 55% at 50% -10%, rgba(76, 175, 80, 0.2), transparent 55%),
+    radial-gradient(ellipse 45% 35% at 100% 100%, rgba(67, 160, 71, 0.12), transparent 50%),
+    var(--asm-page-bg);
+  color: var(--asm-green-dark);
+}
+
+.asm-shell {
+  max-width: 720px;
+  margin: 0 auto;
+}
+
+.asm-back {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  margin-bottom: 20px;
+  font-size: 14px;
+  font-weight: 600;
+  color: #a5d6a7;
+  text-decoration: none;
+}
+
+.asm-back:hover {
+  color: #c8e6c9;
+  text-decoration: underline;
+  text-underline-offset: 3px;
+}
+
+.asm-hero {
+  margin-bottom: 24px;
+}
+
+.asm-title {
+  margin: 0 0 8px;
+  font-size: clamp(1.35rem, 4vw, 1.65rem);
+  font-weight: 800;
+  letter-spacing: -0.03em;
+  color: #fff;
+}
+
+.asm-lead {
+  margin: 0;
+  font-size: 14px;
+  line-height: 1.5;
+  color: rgba(255, 255, 255, 0.72);
+  max-width: 42em;
+}
+
+.asm-alert {
+  margin: 0 0 16px;
+  padding: 12px 14px;
+  border-radius: 12px;
+  font-size: 14px;
+  background: rgba(211, 47, 47, 0.15);
+  border: 1px solid rgba(239, 83, 80, 0.45);
+  color: #ffcdd2;
+}
+
+.asm-empty {
+  margin: 0;
+  padding: 28px 20px;
+  text-align: center;
+  font-size: 15px;
+  color: rgba(255, 255, 255, 0.65);
+  background: rgba(255, 255, 255, 0.04);
+  border: 1px dashed rgba(255, 255, 255, 0.12);
+  border-radius: 16px;
+}
+
+.asm-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+}
+
+.asm-card {
+  background: var(--asm-card);
+  border-radius: 16px;
+  border: 1px solid rgba(0, 0, 0, 0.06);
+  box-shadow:
+    0 1px 0 rgba(255, 255, 255, 0.06) inset,
+    0 8px 32px rgba(0, 0, 0, 0.28);
+  overflow: hidden;
+  display: flex;
+  flex-direction: column;
+}
+
+.asm-card__main {
+  padding: 18px 18px 16px;
+}
+
+.asm-card__lesson {
+  margin: 0 0 6px;
+  font-size: 1.05rem;
+  font-weight: 800;
+  letter-spacing: -0.02em;
+  color: var(--asm-green-dark);
+  line-height: 1.3;
+}
+
+.asm-card__task {
+  margin: 0 0 12px;
+  font-size: 14px;
+  color: #33691e;
+  line-height: 1.45;
+}
+
+.asm-card__row {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 10px;
+}
+
+.asm-badge {
+  display: inline-flex;
+  align-items: center;
+  padding: 4px 10px;
+  border-radius: 999px;
+  font-size: 12px;
+  font-weight: 600;
+  background: var(--asm-green-soft);
+  color: var(--asm-green-dark);
+}
+
+.asm-badge--reward {
+  background: linear-gradient(135deg, #fff8e1 0%, #ffecb3 100%);
+  color: #5d4037;
+  border: 1px solid rgba(255, 193, 7, 0.35);
+}
+
+.asm-badge--done {
+  background: #e8f5e9;
+  color: #2e7d32;
+  border: 1px solid rgba(76, 175, 80, 0.35);
+}
+
+.asm-badge--muted {
+  background: #f5f5f5;
+  color: var(--asm-muted);
+}
+
+.asm-card__note {
+  margin: 0 0 14px;
+  font-size: 13px;
+  color: #616161;
+  line-height: 1.45;
+}
+
+.asm-card__action {
+  padding: 0 18px 18px;
+}
+
+.asm-btn {
+  width: 100%;
+  padding: 12px 18px;
+  border: none;
+  border-radius: 12px;
+  font-size: 15px;
+  font-weight: 700;
+  font-family: inherit;
+  cursor: pointer;
+  background: linear-gradient(180deg, var(--asm-green) 0%, #388e3c 100%);
+  color: #fff;
+  box-shadow: 0 2px 8px rgba(46, 125, 50, 0.35);
+  transition:
+    transform 0.15s ease,
+    box-shadow 0.15s ease;
+}
+
+.asm-btn:hover {
+  filter: brightness(1.05);
+  box-shadow: 0 4px 14px rgba(46, 125, 50, 0.4);
+}
+
+.asm-btn:active {
+  transform: scale(0.99);
+}
+
+/* ——— Модальное окно (портал) ——— */
+
+.asm-overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 400;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: max(12px, env(safe-area-inset-top)) 16px 16px;
+  box-sizing: border-box;
+  background: rgba(15, 18, 22, 0.62);
+  backdrop-filter: blur(4px);
+  animation: asm-fade-in 0.2s ease;
+}
+
+@keyframes asm-fade-in {
+  from {
+    opacity: 0;
+  }
+  to {
+    opacity: 1;
+  }
+}
+
+.asm-modal {
+  width: 100%;
+  max-width: 520px;
+  max-height: min(92vh, 880px);
+  display: flex;
+  flex-direction: column;
+  background: #fff;
+  color: #1b5e20;
+  color-scheme: light;
+  border-radius: 20px;
+  box-shadow:
+    0 24px 80px rgba(0, 0, 0, 0.45),
+    0 0 0 1px rgba(255, 255, 255, 0.08) inset;
+  overflow: hidden;
+  animation: asm-modal-in 0.28s cubic-bezier(0.22, 1, 0.36, 1);
+}
+
+.asm-modal__form {
+  display: flex;
+  flex-direction: column;
+  flex: 1 1 auto;
+  min-height: 0;
+  overflow: hidden;
+}
+
+@keyframes asm-modal-in {
+  from {
+    opacity: 0.85;
+    transform: translateY(16px) scale(0.98);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0) scale(1);
+  }
+}
+
+.asm-modal__head {
+  flex-shrink: 0;
+  position: relative;
+  padding: 22px 48px 12px 22px;
+  border-bottom: 1px solid var(--asm-border);
+  background: linear-gradient(180deg, #fafafa 0%, #fff 100%);
+}
+
+.asm-modal__close {
+  position: absolute;
+  top: 14px;
+  right: 12px;
+  width: 40px;
+  height: 40px;
+  border: none;
+  border-radius: 10px;
+  background: transparent;
+  font-size: 24px;
+  line-height: 1;
+  color: #757575;
+  cursor: pointer;
+  font-family: inherit;
+}
+
+.asm-modal__close:hover {
+  background: rgba(0, 0, 0, 0.06);
+  color: var(--asm-green-dark);
+}
+
+.asm-modal__title {
+  margin: 0;
+  font-size: 1.35rem;
+  font-weight: 800;
+  letter-spacing: -0.03em;
+  color: var(--asm-green-dark);
+}
+
+.asm-modal__notice {
+  margin: 10px 0 0;
+  padding: 10px 12px;
+  font-size: 13px;
+  line-height: 1.45;
+  color: #5d4037;
+  background: #fff8e1;
+  border: 1px solid #ffe082;
+  border-radius: 10px;
+}
+
+.asm-modal__body {
+  flex: 1 1 auto;
+  min-height: 0;
+  overflow-x: hidden;
+  overflow-y: auto;
+  padding: 18px 22px 20px;
+  -webkit-overflow-scrolling: touch;
+}
+
+.asm-modal__task {
+  margin: 0 0 18px;
+  font-size: 15px;
+  line-height: 1.6;
+  color: #37474f;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+  word-break: break-word;
+}
+
+.asm-modal__err {
+  margin: 0 0 12px;
+  padding: 10px 12px;
+  font-size: 13px;
+  border-radius: 10px;
+  background: rgba(211, 47, 47, 0.08);
+  border: 1px solid rgba(211, 47, 47, 0.25);
+  color: #c62828;
+}
+
+.asm-choices-label {
+  display: block;
+  margin-bottom: 10px;
+  font-size: 13px;
+  font-weight: 700;
+  color: var(--asm-muted);
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
+
+.asm-choices {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+/* Tailwind preflight задаёт button { background: transparent } — явно переопределяем */
+.asm-modal button.asm-choice {
+  display: block;
+  width: 100%;
+  padding: 12px 14px;
+  text-align: left;
+  font-size: 15px;
+  font-family: inherit;
+  line-height: 1.45;
+  -webkit-appearance: none;
+  appearance: none;
+  color: #1b5e20;
+  background-color: #f4f9f4;
+  border: 2px solid var(--asm-border);
+  border-radius: 12px;
+  cursor: pointer;
+  transition:
+    border-color 0.15s ease,
+    background-color 0.15s ease;
+}
+
+.asm-modal button.asm-choice:hover {
+  border-color: #a5d6a7;
+  background-color: #e8f5e9;
+}
+
+.asm-modal button.asm-choice.asm-choice--on {
+  border-color: #43a047;
+  background-color: #e8f5e9;
+  box-shadow: 0 0 0 1px rgba(76, 175, 80, 0.35);
+}
+
+.asm-field {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.asm-field label {
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--asm-muted);
+}
+
+.asm-input {
+  padding: 12px 14px;
+  border-radius: 12px;
+  border: 2px solid var(--asm-border);
+  font-size: 16px;
+  font-family: inherit;
+  color: var(--asm-green-dark);
+}
+
+.asm-input:focus {
+  outline: none;
+  border-color: var(--asm-green);
+}
+
+.asm-modal__footer {
+  flex-shrink: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  padding: 14px 22px max(18px, env(safe-area-inset-bottom));
+  border-top: 1px solid var(--asm-border);
+  background: #fafafa;
+}
+
+@media (min-width: 480px) {
+  .asm-modal__footer {
+    flex-direction: row-reverse;
+    justify-content: flex-start;
+  }
+
+  .asm-modal__footer .asm-footer-primary {
+    width: auto;
+    min-width: 140px;
+  }
+
+  .asm-modal__footer .asm-footer-secondary {
+    width: auto;
+    min-width: 120px;
+  }
+}
+
+.asm-modal button.asm-footer-primary {
+  width: 100%;
+  padding: 12px 18px;
+  border-radius: 12px;
+  font-size: 15px;
+  font-weight: 700;
+  font-family: inherit;
+  cursor: pointer;
+  -webkit-appearance: none;
+  appearance: none;
+  border: 2px solid #1b5e20;
+  background-color: #2e7d32;
+  background-image: linear-gradient(180deg, #43a047 0%, #2e7d32 100%);
+  color: #ffffff;
+  box-shadow: 0 2px 8px rgba(27, 94, 32, 0.25);
+}
+
+.asm-modal button.asm-footer-primary:hover:not(:disabled) {
+  filter: brightness(1.06);
+}
+
+.asm-modal button.asm-footer-primary:disabled {
+  opacity: 0.55;
+  cursor: not-allowed;
+}
+
+.asm-modal button.asm-footer-secondary {
+  width: 100%;
+  padding: 12px 18px;
+  border-radius: 12px;
+  font-size: 15px;
+  font-weight: 600;
+  font-family: inherit;
+  cursor: pointer;
+  -webkit-appearance: none;
+  appearance: none;
+  background-color: #ffffff;
+  border: 2px solid var(--asm-border);
+  color: #1b5e20;
+}
+
+.asm-modal button.asm-footer-secondary:hover {
+  border-color: #a5d6a7;
+  background-color: #f9fff9;
+}
+
+.asm-result-line {
+  margin: 0 0 12px;
+  font-size: 16px;
+  line-height: 1.5;
+  color: #37474f;
+}
+
+.asm-result-stats {
+  margin: 0 0 20px;
+  font-size: 14px;
+  color: var(--asm-muted);
+}

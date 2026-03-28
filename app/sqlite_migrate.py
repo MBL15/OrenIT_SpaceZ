@@ -53,6 +53,43 @@ def apply_sqlite_migrations(engine) -> None:
                 text("ALTER TABLE class_task_assignments ADD COLUMN reward_xp INTEGER NOT NULL DEFAULT 0")
             )
             conn.commit()
+        if "block_id" not in acols:
+            conn.execute(text("ALTER TABLE class_task_assignments ADD COLUMN block_id INTEGER"))
+            conn.commit()
+
+        conn.execute(
+            text(
+                """
+                CREATE TABLE IF NOT EXISTS assignment_blocks (
+                    id INTEGER NOT NULL PRIMARY KEY AUTOINCREMENT,
+                    class_id INTEGER NOT NULL,
+                    teacher_id INTEGER NOT NULL,
+                    note TEXT,
+                    created_at VARCHAR(32) NOT NULL,
+                    reward_coins INTEGER NOT NULL DEFAULT 0,
+                    reward_xp INTEGER NOT NULL DEFAULT 0,
+                    FOREIGN KEY(class_id) REFERENCES classes (id) ON DELETE CASCADE,
+                    FOREIGN KEY(teacher_id) REFERENCES users (id) ON DELETE CASCADE
+                )
+                """
+            )
+        )
+        conn.commit()
+        conn.execute(
+            text(
+                """
+                CREATE TABLE IF NOT EXISTS teacher_block_reward_claims (
+                    user_id INTEGER NOT NULL,
+                    block_id INTEGER NOT NULL,
+                    claimed_at VARCHAR(32) NOT NULL,
+                    PRIMARY KEY (user_id, block_id),
+                    FOREIGN KEY(user_id) REFERENCES users (id) ON DELETE CASCADE,
+                    FOREIGN KEY(block_id) REFERENCES assignment_blocks (id) ON DELETE CASCADE
+                )
+                """
+            )
+        )
+        conn.commit()
 
         rows = conn.execute(text("PRAGMA table_info(task_instances)")).fetchall()
         tcols = {r[1] for r in rows}

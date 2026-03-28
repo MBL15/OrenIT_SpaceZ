@@ -4,6 +4,16 @@ import os
 from functools import lru_cache
 from pathlib import Path
 
+try:
+    from dotenv import load_dotenv
+except ImportError:
+    load_dotenv = None  # type: ignore[misc, assignment]
+
+if load_dotenv:
+    _root = Path(__file__).resolve().parent.parent
+    load_dotenv(_root / ".env")
+    load_dotenv(_root / ".env.development", override=True)
+
 from sqlalchemy import create_engine, event
 from sqlalchemy.orm import DeclarativeBase, sessionmaker
 
@@ -32,6 +42,10 @@ class Settings:
         self.practice_wrong_xp_penalty = int(os.getenv("PRACTICE_WRONG_XP_PENALTY", "10"))
         self.speed_bonus_ms = int(os.getenv("SPEED_BONUS_MS", "30000"))
         self.speed_bonus_amount = int(os.getenv("SPEED_BONUS_AMOUNT", "5"))
+        # dev: при старте перезаписать пароль пользователя admin (см. app/seed.py)
+        self.sync_admin_password = os.getenv(
+            "ORENIT_SYNC_ADMIN_PASSWORD", ""
+        ).lower() in ("1", "true", "yes")
 
 
 _settings = get_settings()

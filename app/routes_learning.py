@@ -3,7 +3,7 @@ from __future__ import annotations
 import json
 import random
 from datetime import datetime, timedelta, timezone
-from typing import Annotated
+from typing import Annotated, Literal
 
 from fastapi import APIRouter, Depends, HTTPException, Query, Request, status
 from pydantic import BaseModel, ConfigDict, Field
@@ -13,6 +13,7 @@ from sqlalchemy.orm import Session
 from app.access import get_current_user, get_parent_token_user
 from app.core import get_db, get_settings
 from app.models import (
+    AssignmentBlock,
     ClassInvite,
     ClassMember,
     ClassTaskAssignment,
@@ -26,6 +27,7 @@ from app.models import (
     TaskInstance,
     TaskTemplate,
     TeacherAssignmentRewardClaim,
+    TeacherBlockRewardClaim,
     User,
     UserStat,
     Wallet,
@@ -35,8 +37,15 @@ from app.schemas import JoinClassBody, PracticeSubmitBody
 from app.services import (
     add_score,
     answers_match,
+    assignment_attempt_counts,
+    block_all_other_tasks_solved_correctly,
+    block_assignment_ids_ordered,
+    block_every_task_has_correct_attempt,
+    block_grade_ceil_mean,
     compute_expected,
+    grade_for_assignment,
     ensure_user_economy_rows,
+    grade_2_to_5_from_wrong_attempts,
     grant_lesson_completion_xp_if_eligible,
     parse_checker_config,
     parse_param_spec,
@@ -260,19 +269,162 @@ class MyClassRow(BaseModel):
     class_name: str
 
 
-class MyAssignmentRow(BaseModel):
+class MyAssignmentTaskInBlock(BaseModel):
     assignment_id: int
-    class_id: int
-    class_name: str
     task_template_id: int
     lesson_id: int
     lesson_title: str
     task_title: str | None
+
+
+class MyAssignmentRow(BaseModel):
+    kind: Literal["single", "block"] = "single"
+    block_id: int | None = None
+    assignment_id: int
+    class_id: int
+    class_name: str
+    task_template_id: int | None = None
+    lesson_id: int | None = None
+    lesson_title: str | None = None
+    task_title: str | None = None
     note: str | None
     assigned_at: str
     reward_coins: int
     reward_xp: int
-    bonus_claimed: bool = Field(description="Бонус учителя за это назначение уже получен")
+    bonus_claimed: bool = Field(description="Бонус учителя за назначение или за весь блок уже получен")
+    tasks: list[MyAssignmentTaskInBlock] | None = None
+
+
+class AssignmentJournalRow(BaseModel):
+    """Журнал назначений учителя: что выдано и что сделано учеником."""
+
+    assignment_id: int
+    class_name: str
+    lesson_title: str
+    task_title: str | None
+    note: str | None
+    assigned_at: str
+    block_id: int | None = None
+    position_in_block: int | None = Field(
+        default=None,
+        description="Номер задания в блоке (1…N), если это блок",
+    )
+    block_tasks_total: int | None = None
+    status: Literal["not_started", "in_progress", "done"]
+    grade_2_5: int | None = None
+    block_grade_2_5: int | None = Field(
+        default=None,
+        description="Оценка за весь блок, когда все задачи блока сданы верно",
+    )
+    total_attempts: int
+    wrong_attempts: int
+    correct_attempts: int
+    bonus_claimed: bool
+
+
+@learning_router.get("/me/assignments/journal", response_model=list[AssignmentJournalRow])
+def my_assignments_journal(
+    db: Annotated[Session, Depends(get_db)],
+    user: Annotated[User, Depends(get_current_user)],
+) -> list[AssignmentJournalRow]:
+    if user.role != "child":
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Only students")
+    member_rows = db.query(ClassMember).filter(ClassMember.user_id == user.id).all()
+    if not member_rows:
+        return []
+    class_ids = [m.class_id for m in member_rows]
+    assigns = (
+        db.query(ClassTaskAssignment)
+        .filter(ClassTaskAssignment.class_id.in_(class_ids))
+        .order_by(ClassTaskAssignment.id.desc())
+        .all()
+    )
+    aid_list = [a.id for a in assigns]
+    claimed_ids: set[int] = set()
+    if aid_list:
+        claimed_ids = {
+            row.assignment_id
+            for row in db.query(TeacherAssignmentRewardClaim)
+            .filter(
+                TeacherAssignmentRewardClaim.user_id == user.id,
+                TeacherAssignmentRewardClaim.assignment_id.in_(aid_list),
+            )
+            .all()
+        }
+    block_ids_u = {a.block_id for a in assigns if a.block_id is not None}
+    block_claimed: set[int] = set()
+    if block_ids_u:
+        block_claimed = {
+            row.block_id
+            for row in db.query(TeacherBlockRewardClaim)
+            .filter(
+                TeacherBlockRewardClaim.user_id == user.id,
+                TeacherBlockRewardClaim.block_id.in_(block_ids_u),
+            )
+            .all()
+        }
+
+    block_grade: dict[int, int | None] = {}
+    for bid in block_ids_u:
+        if block_every_task_has_correct_attempt(db, user.id, bid):
+            block_grade[bid] = block_grade_ceil_mean(db, user.id, bid)
+        else:
+            block_grade[bid] = None
+
+    out: list[AssignmentJournalRow] = []
+    for a in assigns:
+        c = db.get(CourseClass, a.class_id)
+        tmpl = db.get(TaskTemplate, a.task_template_id)
+        lesson = db.get(Lesson, tmpl.lesson_id) if tmpl else None
+        if not c or not tmpl or not lesson:
+            continue
+        total, wrong, correct = assignment_attempt_counts(db, user.id, a.id)
+        if total == 0:
+            st: Literal["not_started", "in_progress", "done"] = "not_started"
+        elif correct > 0:
+            st = "done"
+        else:
+            st = "in_progress"
+        g25: int | None = (
+            grade_for_assignment(db, user.id, a.id) if total > 0 else None
+        )
+        bid = a.block_id
+        pos: int | None = None
+        btot: int | None = None
+        bg: int | None = None
+        if bid is not None:
+            aids = block_assignment_ids_ordered(db, bid)
+            btot = len(aids)
+            try:
+                pos = aids.index(a.id) + 1
+            except ValueError:
+                pos = None
+            bg = block_grade.get(bid)
+            bonus = bid in block_claimed
+        else:
+            bonus = a.id in claimed_ids
+
+        out.append(
+            AssignmentJournalRow(
+                assignment_id=a.id,
+                class_name=c.name,
+                lesson_title=lesson.title,
+                task_title=tmpl.title,
+                note=a.note,
+                assigned_at=a.created_at,
+                block_id=bid,
+                position_in_block=pos,
+                block_tasks_total=btot,
+                status=st,
+                grade_2_5=g25,
+                block_grade_2_5=bg,
+                total_attempts=total,
+                wrong_attempts=wrong,
+                correct_attempts=correct,
+                bonus_claimed=bonus,
+            )
+        )
+    return out
 
 
 @learning_router.get("/classes/invite-preview", response_model=InvitePreviewOut)
@@ -390,6 +542,20 @@ def my_teacher_assignments(
             )
             .all()
         }
+    block_ids = {a.block_id for a in assigns if a.block_id is not None}
+    block_claimed: set[int] = set()
+    if block_ids:
+        block_claimed = {
+            row.block_id
+            for row in db.query(TeacherBlockRewardClaim)
+            .filter(
+                TeacherBlockRewardClaim.user_id == user.id,
+                TeacherBlockRewardClaim.block_id.in_(block_ids),
+            )
+            .all()
+        }
+
+    seen_blocks: set[int] = set()
     out: list[MyAssignmentRow] = []
     for a in assigns:
         c = db.get(CourseClass, a.class_id)
@@ -397,20 +563,78 @@ def my_teacher_assignments(
         lesson = db.get(Lesson, tmpl.lesson_id) if tmpl else None
         if not c or not tmpl or not lesson:
             continue
+
+        if a.block_id is None:
+            out.append(
+                MyAssignmentRow(
+                    kind="single",
+                    block_id=None,
+                    assignment_id=a.id,
+                    class_id=c.id,
+                    class_name=c.name,
+                    task_template_id=tmpl.id,
+                    lesson_id=lesson.id,
+                    lesson_title=lesson.title,
+                    task_title=tmpl.title,
+                    note=a.note,
+                    assigned_at=a.created_at,
+                    reward_coins=a.reward_coins,
+                    reward_xp=a.reward_xp,
+                    bonus_claimed=a.id in claimed_ids,
+                    tasks=None,
+                )
+            )
+            continue
+
+        if a.block_id in seen_blocks:
+            continue
+        seen_blocks.add(a.block_id)
+        blk = db.get(AssignmentBlock, a.block_id)
+        if not blk:
+            continue
+        members = (
+            db.query(ClassTaskAssignment)
+            .filter(ClassTaskAssignment.block_id == a.block_id)
+            .order_by(ClassTaskAssignment.id.asc())
+            .all()
+        )
+        task_items: list[MyAssignmentTaskInBlock] = []
+        for m in members:
+            mt = db.get(TaskTemplate, m.task_template_id)
+            ml = db.get(Lesson, mt.lesson_id) if mt else None
+            if not mt or not ml:
+                continue
+            task_items.append(
+                MyAssignmentTaskInBlock(
+                    assignment_id=m.id,
+                    task_template_id=mt.id,
+                    lesson_id=ml.id,
+                    lesson_title=ml.title,
+                    task_title=mt.title,
+                )
+            )
+        if not task_items:
+            continue
+        first = members[0]
+        ft = db.get(TaskTemplate, first.task_template_id)
+        fl = db.get(Lesson, ft.lesson_id) if ft else None
         out.append(
             MyAssignmentRow(
-                assignment_id=a.id,
+                kind="block",
+                block_id=blk.id,
+                assignment_id=first.id,
                 class_id=c.id,
                 class_name=c.name,
-                task_template_id=tmpl.id,
-                lesson_id=lesson.id,
-                lesson_title=lesson.title,
-                task_title=tmpl.title,
-                note=a.note,
-                assigned_at=a.created_at,
-                reward_coins=a.reward_coins,
-                reward_xp=a.reward_xp,
-                bonus_claimed=a.id in claimed_ids,
+                task_template_id=ft.id if ft else None,
+                lesson_id=fl.id if fl else None,
+                lesson_title=fl.title if fl else None,
+                task_title=ft.title if ft else None,
+                note=blk.note,
+                assigned_at=blk.created_at,
+                reward_coins=blk.reward_coins,
+                reward_xp=blk.reward_xp,
+                bonus_claimed=blk.id in block_claimed,
+                tasks=task_items,
             )
         )
     return out
@@ -499,6 +723,14 @@ class SubmitPracticeResponse(BaseModel):
         description="Изменение XP: награда за задачу, штраф за ошибку (отрицательное) или бонус за урок",
     )
     notice: str | None = None
+    grade_2_5: int | None = Field(
+        default=None,
+        description="Для задания от учителя: оценка 2–5 (5 без ошибок, −1 за каждую ошибку, минимум 2)",
+    )
+    block_grade_2_5: int | None = Field(
+        default=None,
+        description="Для блока от учителя: среднее оценок по заданиям блока, округлённое вверх (когда блок завершён)",
+    )
 
 
 def _now_iso() -> str:
@@ -606,7 +838,15 @@ def start_practice(
     repeat_without = False
     start_notice: str | None = None
     if link_assignment_id is not None:
-        if (
+        asn_start = db.get(ClassTaskAssignment, link_assignment_id)
+        if asn_start and asn_start.block_id is not None:
+            if (
+                db.get(TeacherBlockRewardClaim, (user.id, asn_start.block_id))
+                is not None
+            ):
+                repeat_without = True
+                start_notice = ASSIGNMENT_REPEAT_NOTICE
+        elif (
             db.get(TeacherAssignmentRewardClaim, (user.id, link_assignment_id))
             is not None
         ):
@@ -682,20 +922,39 @@ def submit_practice(
     currency_on_attempt = 0
     submit_notice: str | None = None
     pending_teacher_claim: int | None = None
+    pending_block_claim: int | None = None
     if correct:
         if inst.assignment_id is not None:
-            claim = db.get(
-                TeacherAssignmentRewardClaim, (user.id, inst.assignment_id)
-            )
             asn = db.get(ClassTaskAssignment, inst.assignment_id)
-            rc = int(asn.reward_coins or 0) if asn else 0
-            rx = int(asn.reward_xp or 0) if asn else 0
-            if claim is not None:
-                submit_notice = ASSIGNMENT_REPEAT_NOTICE
-            elif asn and (rc > 0 or rx > 0):
-                coins_awarded = rc
-                xp_from_task = rx
-                pending_teacher_claim = inst.assignment_id
+            if asn and asn.block_id is not None:
+                blk = db.get(AssignmentBlock, asn.block_id)
+                bclaim = db.get(TeacherBlockRewardClaim, (user.id, asn.block_id))
+                brc = int(blk.reward_coins or 0) if blk else 0
+                brx = int(blk.reward_xp or 0) if blk else 0
+                if bclaim is not None:
+                    submit_notice = ASSIGNMENT_REPEAT_NOTICE
+                elif (
+                    blk
+                    and (brc > 0 or brx > 0)
+                    and block_all_other_tasks_solved_correctly(
+                        db, user.id, asn.block_id, inst.assignment_id
+                    )
+                ):
+                    coins_awarded = brc
+                    xp_from_task = brx
+                    pending_block_claim = asn.block_id
+            else:
+                claim = db.get(
+                    TeacherAssignmentRewardClaim, (user.id, inst.assignment_id)
+                )
+                rc = int(asn.reward_coins or 0) if asn else 0
+                rx = int(asn.reward_xp or 0) if asn else 0
+                if claim is not None:
+                    submit_notice = ASSIGNMENT_REPEAT_NOTICE
+                elif asn and (rc > 0 or rx > 0):
+                    coins_awarded = rc
+                    xp_from_task = rx
+                    pending_teacher_claim = inst.assignment_id
         else:
             prior_today = _count_correct_attempts_today_utc(db, user.id)
             coins_awarded = (
@@ -764,14 +1023,25 @@ def submit_practice(
                     claimed_at=_now_iso(),
                 )
             )
+        if pending_block_claim is not None:
+            db.add(
+                TeacherBlockRewardClaim(
+                    user_id=user.id,
+                    block_id=pending_block_claim,
+                    claimed_at=_now_iso(),
+                )
+            )
 
     elif not correct:
         lp_pen = db.get(LessonProgress, (user.id, tmpl.lesson_id))
         used_assignment_penalty = False
         if inst.assignment_id is not None:
             asn = db.get(ClassTaskAssignment, inst.assignment_id)
-            pen_c = int(asn.reward_coins or 0) if asn else 0
-            pen_x = int(asn.reward_xp or 0) if asn else 0
+            if asn and asn.block_id is not None:
+                pen_c, pen_x = 0, 0
+            else:
+                pen_c = int(asn.reward_coins or 0) if asn else 0
+                pen_x = int(asn.reward_xp or 0) if asn else 0
             if pen_c > 0 or pen_x > 0:
                 used_assignment_penalty = True
                 coins_taken = 0
@@ -870,6 +1140,37 @@ def submit_practice(
     xp_awarded = xp_from_task + xp_from_lesson
     coins_awarded_total = coins_awarded + coins_from_lesson
 
+    grade_2_5: int | None = None
+    if inst.assignment_id is not None:
+        inst_ids_for_grade = [
+            r[0]
+            for r in db.query(TaskInstance.id)
+            .filter(
+                TaskInstance.assignment_id == inst.assignment_id,
+                TaskInstance.user_id == user.id,
+            )
+            .all()
+        ]
+        if inst_ids_for_grade:
+            wrong_for_grade = (
+                db.query(func.count(TaskAttempt.id))
+                .filter(
+                    TaskAttempt.task_instance_id.in_(inst_ids_for_grade),
+                    TaskAttempt.is_correct.is_(False),
+                )
+                .scalar()
+            )
+            grade_2_5 = grade_2_to_5_from_wrong_attempts(int(wrong_for_grade or 0))
+
+    block_grade_2_5: int | None = None
+    asn_blk = db.get(ClassTaskAssignment, inst.assignment_id) if inst.assignment_id else None
+    if (
+        asn_blk
+        and asn_blk.block_id is not None
+        and block_every_task_has_correct_attempt(db, user.id, asn_blk.block_id)
+    ):
+        block_grade_2_5 = block_grade_ceil_mean(db, user.id, asn_blk.block_id)
+
     db.commit()
 
     show_expected: str | None = None
@@ -882,4 +1183,6 @@ def submit_practice(
         coins_awarded=coins_awarded_total,
         xp_awarded=xp_awarded,
         notice=submit_notice,
+        grade_2_5=grade_2_5,
+        block_grade_2_5=block_grade_2_5,
     )

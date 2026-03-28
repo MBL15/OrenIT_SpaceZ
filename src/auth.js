@@ -5,12 +5,6 @@ import {
   parseErrorDetail,
   setToken,
 } from './api'
-import {
-  DEV_MOCK_TOKEN,
-  getMockAdminUser,
-  isDevMockAdminEnabled,
-  matchDevMockAdmin,
-} from './devAuthMock.js'
 
 export function isAdminUser(user) {
   return user?.role === 'admin'
@@ -30,10 +24,6 @@ export function normalizeUser(u) {
 }
 
 export async function apiLogin(login, password) {
-  if (matchDevMockAdmin(login, password)) {
-    setToken(DEV_MOCK_TOKEN)
-    return { ok: true }
-  }
   const res = await apiFetch('/auth/login', {
     method: 'POST',
     skipAuth: true,
@@ -71,9 +61,6 @@ export async function apiRegister({ login, password, display_name, account_type 
 export async function fetchMe() {
   const tok = getToken()
   if (!tok) return null
-  if (isDevMockAdminEnabled() && tok === DEV_MOCK_TOKEN) {
-    return normalizeUser(getMockAdminUser())
-  }
   const res = await apiFetch('/auth/me')
   if (!res.ok) {
     clearToken()

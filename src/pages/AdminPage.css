@@ -1,22 +1,230 @@
-.ap-toolbar {
+/* Админ-панель: статистика, пользователи, смена ролей */
+
+.ap-panel {
+  max-width: 1180px;
+}
+
+.ap-hero {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 16px 24px;
+  padding: 22px 24px 18px;
+  border-bottom: 1px solid var(--cp-border);
+  background: linear-gradient(135deg, rgba(76, 175, 80, 0.07) 0%, transparent 55%);
+}
+
+.ap-hero .cp-back {
+  flex: 0 0 100%;
+}
+
+.ap-hero-text {
+  flex: 1 1 280px;
+  min-width: 0;
+}
+
+.ap-kicker {
+  margin: 0 0 6px;
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  color: #558b2f;
+}
+
+.ap-hero-title {
+  margin: 0 0 6px;
+  font-size: 1.5rem;
+}
+
+.ap-hero-sub {
+  margin: 0;
+  max-width: 52em;
+  line-height: 1.45;
+}
+
+.ap-refresh {
+  align-self: center;
+  flex-shrink: 0;
+}
+
+.ap-body {
+  padding: 20px 24px 36px;
+}
+
+.ap-alert {
+  margin-bottom: 20px;
+}
+
+.ap-section {
+  margin-bottom: 32px;
+}
+
+.ap-section:last-child {
+  margin-bottom: 0;
+}
+
+.ap-section-head {
   display: flex;
   align-items: center;
   justify-content: space-between;
   gap: 12px;
   flex-wrap: wrap;
-  margin-bottom: 8px;
+  margin-bottom: 4px;
 }
 
+.ap-section-title {
+  margin: 0 0 14px;
+  font-size: 1.1rem;
+  font-weight: 800;
+  letter-spacing: -0.02em;
+  color: var(--cp-green-dark);
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex-wrap: wrap;
+}
+
+.ap-count-badge {
+  font-size: 12px;
+  font-weight: 700;
+  padding: 4px 10px;
+  border-radius: 999px;
+  background: rgba(76, 175, 80, 0.12);
+  color: #33691e;
+}
+
+.ap-muted-block {
+  margin: 12px 0 0;
+}
+
+/* Статистика */
+.ap-stats-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(160px, 1fr));
+  gap: 14px;
+}
+
+@media (min-width: 640px) {
+  .ap-stats-grid {
+    grid-template-columns: repeat(2, 1fr);
+  }
+}
+
+@media (min-width: 900px) {
+  .ap-stats-grid {
+    grid-template-columns: repeat(3, 1fr);
+  }
+}
+
+.ap-stat-card {
+  border: 1px solid var(--cp-border);
+  border-radius: 14px;
+  padding: 14px 14px 12px;
+  background: linear-gradient(180deg, #ffffff 0%, #fafdfb 100%);
+  box-shadow: 0 1px 0 rgba(0, 0, 0, 0.03);
+}
+
+.ap-stat-value {
+  margin: 0;
+  font-size: clamp(1.25rem, 2.5vw, 1.65rem);
+  font-weight: 800;
+  letter-spacing: -0.03em;
+  line-height: 1.15;
+  color: var(--cp-green-dark);
+  word-break: break-word;
+}
+
+.ap-stat-label {
+  margin: 8px 0 0;
+  font-size: 12px;
+  font-weight: 700;
+  color: #2e7d32;
+  line-height: 1.3;
+}
+
+.ap-stat-sub {
+  margin: 4px 0 0;
+  font-size: 11px;
+  color: #689f38;
+  opacity: 0.95;
+}
+
+/* Поиск и фильтры */
+.ap-toolbar {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-end;
+  gap: 14px 20px;
+  margin-bottom: 16px;
+}
+
+.ap-search-label {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  flex: 1 1 220px;
+  min-width: 0;
+  max-width: 360px;
+}
+
+.ap-search-hint {
+  font-size: 11px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  color: #558b2f;
+}
+
+.ap-search-input {
+  width: 100%;
+  box-sizing: border-box;
+}
+
+.ap-role-filters {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.ap-chip {
+  border: 1px solid var(--cp-border);
+  background: #fff;
+  color: var(--cp-green-dark);
+  font-size: 13px;
+  font-weight: 600;
+  padding: 8px 14px;
+  border-radius: 999px;
+  cursor: pointer;
+  transition:
+    background 0.15s,
+    border-color 0.15s,
+    color 0.15s;
+}
+
+.ap-chip:hover {
+  border-color: rgba(76, 175, 80, 0.45);
+  background: rgba(76, 175, 80, 0.06);
+}
+
+.ap-chip--on {
+  border-color: #66bb6a;
+  background: rgba(76, 175, 80, 0.14);
+  color: #1b5e20;
+}
+
+/* Таблица */
 .ap-table-wrap {
-  margin-top: 16px;
   overflow-x: auto;
   border: 1px solid var(--cp-border);
-  border-radius: 12px;
+  border-radius: 14px;
   background: #fafdfb;
 }
 
 .ap-users-table {
   width: 100%;
+  min-width: 720px;
   border-collapse: collapse;
   font-size: 14px;
   color: var(--cp-green-dark);
@@ -25,18 +233,23 @@
 .ap-users-table th,
 .ap-users-table td {
   text-align: left;
-  padding: 10px 12px;
+  padding: 12px 14px;
   border-bottom: 1px solid var(--cp-border);
-  vertical-align: top;
+  vertical-align: middle;
 }
 
 .ap-users-table th {
   font-weight: 700;
-  font-size: 12px;
+  font-size: 11px;
   text-transform: uppercase;
-  letter-spacing: 0.04em;
+  letter-spacing: 0.05em;
   color: #558b2f;
-  background: rgba(76, 175, 80, 0.06);
+  background: rgba(76, 175, 80, 0.07);
+}
+
+.ap-th-actions {
+  width: 120px;
+  text-align: right !important;
 }
 
 .ap-users-table tbody tr:last-child td {
@@ -47,31 +260,61 @@
   background: rgba(76, 175, 80, 0.04);
 }
 
+.ap-td-num {
+  font-variant-numeric: tabular-nums;
+  color: #33691e;
+  font-weight: 600;
+  width: 52px;
+}
+
+.ap-login {
+  font-weight: 600;
+}
+
+.ap-td-actions {
+  text-align: right;
+  white-space: nowrap;
+}
+
+.ap-save-btn {
+  padding: 8px 16px;
+  font-size: 13px;
+}
+
+.ap-badge {
+  display: inline-block;
+  font-size: 11px;
+  font-weight: 700;
+  padding: 4px 10px;
+  border-radius: 999px;
+  letter-spacing: 0.02em;
+}
+
+.ap-badge--child {
+  background: rgba(33, 150, 243, 0.12);
+  color: #1565c0;
+}
+
+.ap-badge--teacher {
+  background: rgba(255, 152, 0, 0.14);
+  color: #e65100;
+}
+
+.ap-badge--admin {
+  background: rgba(156, 39, 176, 0.12);
+  color: #6a1b9a;
+}
+
+.ap-role-cell {
+  min-width: 180px;
+}
+
 .ap-role-select {
-  min-width: 168px;
+  min-width: 188px;
+  max-width: 100%;
 }
 
-.ap-admin-body {
-  grid-template-columns: 1fr;
-  padding: 20px 24px 32px;
-}
-
-.ap-user-actions-cell {
-  vertical-align: middle;
-}
-
-.ap-user-actions {
-  display: flex;
-  flex-direction: column;
-  align-items: stretch;
-  gap: 8px;
-  min-width: 148px;
-}
-
-@media (min-width: 640px) {
-  .ap-user-actions {
-    flex-direction: row;
-    flex-wrap: wrap;
-    align-items: center;
-  }
+.ap-role-hint {
+  margin: 6px 0 0;
+  font-size: 12px;
 }

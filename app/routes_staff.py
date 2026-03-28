@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 from datetime import datetime, timezone
-from typing import Annotated
+from typing import Annotated, Literal
 
 from fastapi import APIRouter, Depends, HTTPException, status
 from pydantic import BaseModel, ConfigDict, Field
@@ -11,6 +11,7 @@ from sqlalchemy.orm import Session
 from app.access import hash_password, require_roles
 from app.core import get_db
 from app.models import (
+    AssignmentBlock,
     ClassInvite,
     ClassMember,
     ClassTaskAssignment,
@@ -18,6 +19,7 @@ from app.models import (
     Lesson,
     LessonTheoryBlock,
     TaskAttempt,
+    TaskInstance,
     TaskTemplate,
     TeacherAssignmentRewardClaim,
     User,
@@ -25,15 +27,17 @@ from app.models import (
 from app.schemas import (
     AddMemberBody,
     AdminLessonBody,
+    AdminPatchUserRoleBody,
     AdminTaskBody,
     AdminTheoryBody,
     AdminUserBody,
     CreateClassBody,
+    TeacherAssignBatchBody,
     TeacherAssignTaskBody,
     UserPublic,
 )
 from app.invites import new_invite_code, new_invite_token
-from app.services import ensure_user_economy_rows
+from app.services import ensure_user_economy_rows, grade_2_to_5_from_wrong_attempts
 
 
 def _now_iso() -> str:
@@ -256,6 +260,7 @@ class AssignmentOut(BaseModel):
     created_at: str
     reward_coins: int
     reward_xp: int
+    block_id: int | None = None
 
 
 def _assignments_out_for_class(db: Session, class_id: int) -> list[AssignmentOut]:
@@ -283,6 +288,7 @@ def _assignments_out_for_class(db: Session, class_id: int) -> list[AssignmentOut
                 created_at=row.created_at,
                 reward_coins=row.reward_coins,
                 reward_xp=row.reward_xp,
+                block_id=row.block_id,
             )
         )
     return out
@@ -337,7 +343,113 @@ def assign_task_to_class(
         created_at=row.created_at,
         reward_coins=row.reward_coins,
         reward_xp=row.reward_xp,
+        block_id=row.block_id,
     )
+
+
+def _assignment_out_from_row(
+    row: ClassTaskAssignment, tmpl: TaskTemplate, lesson: Lesson
+) -> AssignmentOut:
+    return AssignmentOut(
+        id=row.id,
+        class_id=row.class_id,
+        task_template_id=row.task_template_id,
+        lesson_id=lesson.id,
+        lesson_title=lesson.title,
+        task_title=tmpl.title,
+        note=row.note,
+        created_at=row.created_at,
+        reward_coins=row.reward_coins,
+        reward_xp=row.reward_xp,
+        block_id=row.block_id,
+    )
+
+
+@teacher_router.post("/classes/{class_id}/assignments/batch", response_model=list[AssignmentOut])
+def assign_tasks_batch_to_class(
+    class_id: int,
+    body: TeacherAssignBatchBody,
+    db: Annotated[Session, Depends(get_db)],
+    user: Annotated[User, Depends(require_roles("teacher", "admin"))],
+) -> list[AssignmentOut]:
+    """Назначить классу блок заданий: общие комментарий и одна награда за весь блок."""
+    c = db.get(CourseClass, class_id)
+    if not c or c.teacher_id != user.id:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Class not found")
+
+    seen_ids: set[int] = set()
+    ordered_ids: list[int] = []
+    for tid in body.task_template_ids:
+        if tid in seen_ids:
+            continue
+        seen_ids.add(tid)
+        ordered_ids.append(tid)
+
+    if not ordered_ids:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Укажите хотя бы одно задание",
+        )
+
+    validated: list[tuple[TaskTemplate, Lesson]] = []
+    for task_template_id in ordered_ids:
+        tmpl = db.get(TaskTemplate, task_template_id)
+        if not tmpl:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail=f"Шаблон задачи {task_template_id} не найден",
+            )
+        if not tmpl.assignable_by_teacher:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail=(
+                    f"Задача {task_template_id} недоступна для назначения — "
+                    "доступны только шаблоны из каталога для учителей."
+                ),
+            )
+        lesson = db.get(Lesson, tmpl.lesson_id)
+        if not lesson:
+            raise HTTPException(
+                status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+                detail="Broken lesson",
+            )
+        if not lesson.is_published:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail=f"Урок для задачи {task_template_id} не опубликован",
+            )
+        validated.append((tmpl, lesson))
+
+    ts = _now_iso()
+    block = AssignmentBlock(
+        class_id=class_id,
+        teacher_id=user.id,
+        note=body.note,
+        created_at=ts,
+        reward_coins=body.reward_coins,
+        reward_xp=body.reward_xp,
+    )
+    db.add(block)
+    db.flush()
+
+    out: list[AssignmentOut] = []
+    for tmpl, lesson in validated:
+        row = ClassTaskAssignment(
+            class_id=class_id,
+            task_template_id=tmpl.id,
+            teacher_id=user.id,
+            note=body.note,
+            created_at=ts,
+            reward_coins=0,
+            reward_xp=0,
+            block_id=block.id,
+        )
+        db.add(row)
+        db.flush()
+        out.append(_assignment_out_from_row(row, tmpl, lesson))
+
+    db.commit()
+    return out
 
 
 @teacher_router.get("/classes/{class_id}/assignments", response_model=list[AssignmentOut])
@@ -350,6 +462,152 @@ def list_class_assignments(
     if not c or c.teacher_id != user.id:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Class not found")
     return _assignments_out_for_class(db, class_id)
+
+
+class AssignmentHistoryRow(AssignmentOut):
+    """Все назначения учителя по всем классам (для вкладки «Домашние задания»)."""
+
+    class_name: str
+
+
+@teacher_router.get("/assignments/history", response_model=list[AssignmentHistoryRow])
+def teacher_assignments_history(
+    db: Annotated[Session, Depends(get_db)],
+    user: Annotated[User, Depends(require_roles("teacher", "admin"))],
+) -> list[AssignmentHistoryRow]:
+    classes = db.query(CourseClass).filter(CourseClass.teacher_id == user.id).all()
+    if not classes:
+        return []
+    cid_to_name = {c.id: c.name for c in classes}
+    class_ids = list(cid_to_name.keys())
+    rows = (
+        db.query(ClassTaskAssignment)
+        .filter(ClassTaskAssignment.class_id.in_(class_ids))
+        .order_by(ClassTaskAssignment.id.desc())
+        .all()
+    )
+    out: list[AssignmentHistoryRow] = []
+    for row in rows:
+        tmpl = db.get(TaskTemplate, row.task_template_id)
+        lesson = db.get(Lesson, tmpl.lesson_id) if tmpl else None
+        if not tmpl or not lesson:
+            continue
+        out.append(
+            AssignmentHistoryRow(
+                id=row.id,
+                class_id=row.class_id,
+                task_template_id=row.task_template_id,
+                lesson_id=lesson.id,
+                lesson_title=lesson.title,
+                task_title=tmpl.title,
+                note=row.note,
+                created_at=row.created_at,
+                reward_coins=row.reward_coins,
+                reward_xp=row.reward_xp,
+                class_name=cid_to_name.get(row.class_id, ""),
+            )
+        )
+    return out
+
+
+class StudentAssignmentProgressOut(BaseModel):
+    user_id: int
+    display_name: str
+    login: str
+    status: Literal["not_started", "in_progress", "completed"]
+    attempts: int
+    wrong_attempts: int = Field(description="Число неверных отправок по этому назначению")
+    grade: int | None = Field(
+        default=None,
+        description="Оценка 2–5: 5 без ошибок, за каждую ошибку минус балл, минимум 2; null если не начинал",
+    )
+    correct_any: bool
+    bonus_claimed: bool
+
+
+def _assignment_progress_rows(
+    db: Session, class_id: int, assignment_id: int
+) -> list[StudentAssignmentProgressOut]:
+    asn = db.get(ClassTaskAssignment, assignment_id)
+    if not asn or asn.class_id != class_id:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Assignment not found")
+
+    members = db.query(ClassMember).filter(ClassMember.class_id == class_id).all()
+    if not members:
+        return []
+
+    out: list[StudentAssignmentProgressOut] = []
+    for m in members:
+        u = db.get(User, m.user_id)
+        if not u or u.role != "child":
+            continue
+
+        inst_ids = [
+            r[0]
+            for r in db.query(TaskInstance.id)
+            .filter(
+                TaskInstance.assignment_id == assignment_id,
+                TaskInstance.user_id == u.id,
+            )
+            .all()
+        ]
+
+        attempts_list: list[TaskAttempt] = []
+        if inst_ids:
+            attempts_list = (
+                db.query(TaskAttempt)
+                .filter(TaskAttempt.task_instance_id.in_(inst_ids))
+                .all()
+            )
+
+        attempts_n = len(attempts_list)
+        wrong_n = sum(1 for a in attempts_list if not a.is_correct)
+        grade_val = (
+            None if attempts_n == 0 else grade_2_to_5_from_wrong_attempts(wrong_n)
+        )
+        correct_any = any(a.is_correct for a in attempts_list)
+        claim = db.get(TeacherAssignmentRewardClaim, (u.id, assignment_id))
+        bonus_claimed = claim is not None
+
+        if attempts_n == 0:
+            status_s: Literal["not_started", "in_progress", "completed"] = "not_started"
+        elif correct_any:
+            status_s = "completed"
+        else:
+            status_s = "in_progress"
+
+        out.append(
+            StudentAssignmentProgressOut(
+                user_id=u.id,
+                display_name=u.display_name,
+                login=u.login,
+                status=status_s,
+                attempts=attempts_n,
+                wrong_attempts=wrong_n,
+                grade=grade_val,
+                correct_any=correct_any,
+                bonus_claimed=bonus_claimed,
+            )
+        )
+
+    out.sort(key=lambda r: (r.display_name or r.login).lower())
+    return out
+
+
+@teacher_router.get(
+    "/classes/{class_id}/assignments/{assignment_id}/progress",
+    response_model=list[StudentAssignmentProgressOut],
+)
+def assignment_progress_for_class(
+    class_id: int,
+    assignment_id: int,
+    db: Annotated[Session, Depends(get_db)],
+    user: Annotated[User, Depends(require_roles("teacher", "admin"))],
+) -> list[StudentAssignmentProgressOut]:
+    c = db.get(CourseClass, class_id)
+    if not c or c.teacher_id != user.id:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Class not found")
+    return _assignment_progress_rows(db, class_id, assignment_id)
 
 
 @teacher_router.delete(
@@ -370,6 +628,12 @@ def delete_class_assignment(
     row = db.get(ClassTaskAssignment, assignment_id)
     if not row or row.class_id != class_id:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Assignment not found")
+    if row.block_id is not None:
+        blk = db.get(AssignmentBlock, row.block_id)
+        if blk:
+            db.delete(blk)
+        db.commit()
+        return
     db.query(TeacherAssignmentRewardClaim).filter(
         TeacherAssignmentRewardClaim.assignment_id == assignment_id
     ).delete()
@@ -452,6 +716,72 @@ class TaskOut(BaseModel):
     param_spec_json: str
     checker_type: str
     checker_config_json: str | None
+
+
+class AdminStatsOut(BaseModel):
+    users_total: int
+    users_child: int
+    users_teacher: int
+    users_admin: int
+    classes_total: int
+    class_memberships: int
+    lessons_total: int
+    task_attempts_total: int
+
+
+@admin_router.get("/stats", response_model=AdminStatsOut)
+def admin_get_stats(
+    db: Annotated[Session, Depends(get_db)],
+    _: Annotated[User, Depends(require_roles("admin"))],
+) -> AdminStatsOut:
+    return AdminStatsOut(
+        users_total=db.query(User).count(),
+        users_child=db.query(User).filter(User.role == "child").count(),
+        users_teacher=db.query(User).filter(User.role == "teacher").count(),
+        users_admin=db.query(User).filter(User.role == "admin").count(),
+        classes_total=db.query(CourseClass).count(),
+        class_memberships=db.query(ClassMember).count(),
+        lessons_total=db.query(Lesson).count(),
+        task_attempts_total=db.query(TaskAttempt).count(),
+    )
+
+
+@admin_router.get("/users", response_model=list[UserPublic])
+def admin_list_users(
+    db: Annotated[Session, Depends(get_db)],
+    _: Annotated[User, Depends(require_roles("admin"))],
+) -> list[User]:
+    return db.query(User).order_by(User.id).all()
+
+
+@admin_router.patch("/users/{user_id}", response_model=UserPublic)
+def admin_patch_user_role(
+    user_id: int,
+    body: AdminPatchUserRoleBody,
+    db: Annotated[Session, Depends(get_db)],
+    admin_user: Annotated[User, Depends(require_roles("admin"))],
+) -> User:
+    if body.role not in ("child", "teacher", "admin"):
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Недопустимая роль")
+    u = db.get(User, user_id)
+    if not u:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Пользователь не найден")
+    if admin_user.id == user_id and u.role == "admin" and body.role != "admin":
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Нельзя снять с себя роль администратора",
+        )
+    if u.role == "admin" and body.role != "admin":
+        admins = db.query(func.count(User.id)).filter(User.role == "admin").scalar() or 0
+        if int(admins) <= 1:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="Нельзя убрать последнего администратора",
+            )
+    u.role = body.role
+    db.commit()
+    db.refresh(u)
+    return u
 
 
 @admin_router.post("/users", response_model=UserPublic)

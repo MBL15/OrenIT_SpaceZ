@@ -1,77 +1,46 @@
-import { useMemo, useState } from 'react'
-import { Link } from 'react-router-dom'
+import { useCallback, useEffect, useMemo, useState } from 'react'
+import { Link, Navigate } from 'react-router-dom'
+import { apiFetch, parseErrorDetail } from '../api.js'
 import { useAuth } from '../AuthContext.jsx'
 import ParentAgeCheckForm from '../components/ParentAgeCheckForm.jsx'
 import { clearParentUnlock, isParentUnlocked } from '../lib/parentUnlock.js'
 import './ParentsPage.css'
 
-/** Демо-данные; заменить ответом API */
-const SUBJECT_PERFORMANCE = [
-  { subject: 'Основы информатики', avg: 4.7, tasksDone: 24 },
-  { subject: 'Продуктовая разработка', avg: 4.4, tasksDone: 12 },
-  { subject: 'Олимпиады', avg: 4.6, tasksDone: 8 },
-]
-
-const TASKS_CHART = {
-  week: {
-    caption: 'За последние 7 дней',
-    unit: 'заданий в день',
-    points: [
-      { label: 'Пн', value: 2 },
-      { label: 'Вт', value: 3 },
-      { label: 'Ср', value: 1 },
-      { label: 'Чт', value: 4 },
-      { label: 'Пт', value: 2 },
-      { label: 'Сб', value: 5 },
-      { label: 'Вс', value: 3 },
-    ],
-  },
-  month: {
-    caption: 'По неделям текущего месяца',
-    unit: 'заданий за неделю',
-    points: [
-      { label: '1 н.', value: 12 },
-      { label: '2 н.', value: 18 },
-      { label: '3 н.', value: 15 },
-      { label: '4 н.', value: 22 },
-    ],
-  },
-  semester: {
-    caption: 'По месяцам семестра',
-    unit: 'заданий за месяц',
-    points: [
-      { label: 'Сен', value: 28 },
-      { label: 'Окт', value: 32 },
-      { label: 'Ноя', value: 30 },
-      { label: 'Дек', value: 35 },
-      { label: 'Янв', value: 38 },
-      { label: 'Фев', value: 40 },
-    ],
-  },
+function shortLessonTitle(title, maxLen = 12) {
+  const t = (title || '').trim()
+  if (t.length <= maxLen) return t || '—'
+  return `${t.slice(0, maxLen - 1)}…`
 }
 
-const PERIOD_KEYS = /** @type {const} */ (['week', 'month', 'semester'])
-
-const PERIOD_LABELS = {
-  week: 'Неделя',
-  month: 'Месяц',
-  semester: 'Семестр',
+function formatAssignedAt(iso) {
+  if (iso == null || iso === '') return '—'
+  try {
+    const d = new Date(iso)
+    if (Number.isNaN(d.getTime())) return String(iso)
+    return d.toLocaleDateString('ru-RU', {
+      day: 'numeric',
+      month: 'short',
+      year: 'numeric',
+    })
+  } catch {
+    return String(iso)
+  }
 }
 
-function gradeTone(avg) {
-  if (avg >= 4.5) return 'pp-grade--high'
-  if (avg >= 4) return 'pp-grade--mid'
-  return ''
+function journalStatusRu(status) {
+  if (status === 'not_started') return 'Не начато'
+  if (status === 'in_progress') return 'В работе'
+  return 'Сдано верно'
 }
 
-function overallAvg(rows) {
-  if (!rows.length) return 0
-  const s = rows.reduce((a, r) => a + r.avg, 0)
-  return Math.round((s / rows.length) * 10) / 10
-}
-
-function TasksBarChart({ periodKey }) {
-  const { points, caption, unit } = TASKS_CHART[periodKey]
+function TasksBarChart({ points, caption, unit }) {
+  if (!points.length) {
+    return (
+      <p className="pp-section-hint" style={{ marginTop: 0 }}>
+        Пока нет данных о попытках по урокам.
+      </p>
+    )
+  }
   const max = Math.max(...points.map((p) => p.value), 1)
   const total = points.reduce((a, p) => a + p.value, 0)
 
@@ -84,7 +53,7 @@ function TasksBarChart({ periodKey }) {
   const chartW = W - padL - padR
   const chartH = H - padT - padB
   const n = points.length
-  const gap = 8
+  const gap = n > 8 ? 4 : 8
   const barW = (chartW - gap * (n - 1)) / n
 
   const bars = points.map((p, i) => {
@@ -94,7 +63,7 @@ function TasksBarChart({ periodKey }) {
     return { ...p, x, y, w: barW, h }
   })
 
-  const ariaSummary = `${caption}. Всего выполнено заданий: ${total}. ${points.map((p) => `${p.label}: ${p.value}`).join(', ')}.`
+  const ariaSummary = `${caption}. Всего попыток: ${total}. ${points.map((p) => `${p.label}: ${p.value}`).join(', ')}.`
 
   return (
     <div className="pp-chart-wrap">
@@ -104,7 +73,7 @@ function TasksBarChart({ periodKey }) {
         role="img"
         aria-label={ariaSummary}
       >
-        <title>Диаграмма выполненных заданий</title>
+        <title>Диаграмма попыток по урокам</title>
         <desc>{ariaSummary}</desc>
         <line
           x1={padL}
@@ -162,21 +131,88 @@ function TasksBarChart({ periodKey }) {
 export default function ParentsPage() {
   const { user } = useAuth()
   const [unlocked, setUnlocked] = useState(() => isParentUnlocked())
-  const [period, setPeriod] = useState(/** @type {'week' | 'month' | 'semester'} */ ('month'))
+  const [progressRows, setProgressRows] = useState([])
+  const [progressLoading, setProgressLoading] = useState(false)
+  const [progressErr, setProgressErr] = useState('')
+  const [journalRows, setJournalRows] = useState([])
+  const [journalLoading, setJournalLoading] = useState(false)
+  const [journalErr, setJournalErr] = useState('')
 
-  const avgAll = useMemo(() => overallAvg(SUBJECT_PERFORMANCE), [])
-  const chartTotal = useMemo(
-    () => TASKS_CHART[period].points.reduce((a, p) => a + p.value, 0),
-    [period],
+  const loadProgress = useCallback(async () => {
+    setProgressErr('')
+    setProgressLoading(true)
+    try {
+      const res = await apiFetch('/me/progress')
+      const data = await res.json().catch(() => [])
+      if (!res.ok) {
+        setProgressRows([])
+        setProgressErr(parseErrorDetail(data))
+        return
+      }
+      setProgressRows(Array.isArray(data) ? data : [])
+    } finally {
+      setProgressLoading(false)
+    }
+  }, [])
+
+  const loadJournal = useCallback(async () => {
+    setJournalErr('')
+    setJournalLoading(true)
+    try {
+      const res = await apiFetch('/me/assignments/journal')
+      const data = await res.json().catch(() => [])
+      if (!res.ok) {
+        setJournalRows([])
+        setJournalErr(parseErrorDetail(data))
+        return
+      }
+      setJournalRows(Array.isArray(data) ? data : [])
+    } finally {
+      setJournalLoading(false)
+    }
+  }, [])
+
+  useEffect(() => {
+    if (unlocked && user?.role === 'child') {
+      loadProgress()
+      loadJournal()
+    }
+  }, [unlocked, user?.role, loadProgress, loadJournal])
+
+  const summary = useMemo(() => {
+    if (!progressRows.length) return null
+    const theory = progressRows.filter((r) => r.theory_done).length
+    const practice = progressRows.filter((r) => r.practice_done).length
+    const attempts = progressRows.reduce((a, r) => a + r.total_attempts, 0)
+    return {
+      lessons: progressRows.length,
+      theory,
+      practice,
+      attempts,
+    }
+  }, [progressRows])
+
+  const chartPoints = useMemo(
+    () =>
+      progressRows.map((p) => ({
+        label: shortLessonTitle(p.lesson_title),
+        value: p.total_attempts,
+      })),
+    [progressRows],
   )
 
-  const studentLine = user?.name
-    ? `Учащийся: ${user.name}`
+  const display = (user?.display_name ?? user?.name ?? '').trim()
+  const studentLine = display
+    ? `Учащийся: ${display}`
     : 'Данные по текущему аккаунту'
 
   const requestVerificationAgain = () => {
     clearParentUnlock()
     setUnlocked(false)
+  }
+
+  if (user?.role === 'teacher' || user?.role === 'admin') {
+    return <Navigate to="/app" replace />
   }
 
   if (!unlocked) {
@@ -190,7 +226,7 @@ export default function ParentsPage() {
             <h1 className="pp-title">Родителям</h1>
             <p className="pp-sub">
               Короткая проверка: ответьте на пример без калькулятора, чтобы
-              открыть статистику.
+              открыть статистику по урокам на платформе.
             </p>
           </header>
           <div className="pp-main">
@@ -198,7 +234,8 @@ export default function ParentsPage() {
               <span className="pp-gate-badge">Шаг 1 из 1</span>
               <h2 className="pp-gate-page-title">Короткая проверка</h2>
               <p className="pp-gate-lead">
-                Это нужно, чтобы ребёнок не видел оценки без взрослого рядом.
+                Это нужно, чтобы ребёнок не видел оценки и детальную статистику
+                без взрослого рядом.
               </p>
             </div>
             <div className="pp-gate">
@@ -241,81 +278,194 @@ export default function ParentsPage() {
             </button>
           </div>
 
-          <p className="pp-note" role="status">
-            Показаны демонстрационные данные. После подключения к журналу здесь
-            появятся реальные оценки и статистика заданий.
+          <h2 className="pp-block-title">Прохождение курса</h2>
+          <p className="pp-block-lead">
+            Опубликованные уроки: для каждого видно, пройдена ли теория и
+            практика, и сколько всего было попыток по задачам. Оценок за курс
+            здесь нет.
           </p>
 
-          <section className="pp-section" aria-labelledby="pp-grades-title">
+          {progressErr ? <p className="pp-gate-err">{progressErr}</p> : null}
+
+          {progressLoading ? (
+            <p className="pp-section-hint" style={{ margin: '0 0 16px' }}>
+              Загрузка данных курса…
+            </p>
+          ) : null}
+
+          <section className="pp-section" aria-labelledby="pp-course-table-title">
             <div className="pp-section-head">
-              <h2 id="pp-grades-title" className="pp-section-title">
-                Успеваемость
+              <h2 id="pp-course-table-title" className="pp-section-title">
+                Статус по урокам
               </h2>
               <p className="pp-section-hint">
-                Средний балл по разделам (пятибальная шкала) · среднее по всем
-                разделам: <strong>{avgAll}</strong>
+                {summary ? (
+                  <>
+                    Уроков в курсе: <strong>{summary.lessons}</strong>. Теория
+                    пройдена: <strong>{summary.theory}</strong>. Практика
+                    пройдена: <strong>{summary.practice}</strong>. Всего
+                    попыток по задачам: <strong>{summary.attempts}</strong>.
+                  </>
+                ) : (
+                  'Пока нет данных — ученик ещё не начинал уроки или курс пуст.'
+                )}
               </p>
             </div>
             <div className="pp-section-body">
-              <table className="pp-grades">
-                <thead>
-                  <tr>
-                    <th scope="col">Раздел</th>
-                    <th scope="col">Средний балл</th>
-                    <th scope="col">Заданий сдано (семестр)</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {SUBJECT_PERFORMANCE.map((row) => (
-                    <tr key={row.subject}>
-                      <td>{row.subject}</td>
-                      <td>
-                        <span className={`pp-grade ${gradeTone(row.avg)}`}>
-                          {row.avg}
-                        </span>
-                      </td>
-                      <td className="pp-grade">{row.tasksDone}</td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
+              {!progressLoading && progressRows.length === 0 && !progressErr ? (
+                <p className="pp-section-hint" style={{ margin: 0 }}>
+                  Нет данных. Когда ребёнок откроет уроки и решит задачи, здесь
+                  появится таблица.
+                </p>
+              ) : null}
+              {progressRows.length > 0 ? (
+                <div style={{ overflowX: 'auto' }}>
+                  <table className="pp-grades pp-course-pass-table">
+                    <thead>
+                      <tr>
+                        <th scope="col">Урок</th>
+                        <th scope="col">Теория</th>
+                        <th scope="col">Практика</th>
+                        <th scope="col">Всего попыток</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {progressRows.map((row) => (
+                        <tr key={row.lesson_id}>
+                          <td>{row.lesson_title}</td>
+                          <td>
+                            <span
+                              className={
+                                row.theory_done ? 'pp-pass-yes' : 'pp-pass-no'
+                              }
+                            >
+                              {row.theory_done ? 'Пройдено' : 'Не пройдено'}
+                            </span>
+                          </td>
+                          <td>
+                            <span
+                              className={
+                                row.practice_done ? 'pp-pass-yes' : 'pp-pass-no'
+                              }
+                            >
+                              {row.practice_done ? 'Пройдено' : 'Не пройдено'}
+                            </span>
+                          </td>
+                          <td>{row.total_attempts}</td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              ) : null}
             </div>
           </section>
 
           <section className="pp-section" aria-labelledby="pp-chart-title">
             <div className="pp-section-head">
               <h2 id="pp-chart-title" className="pp-section-title">
-                Выполненные задания
+                Попытки по урокам
               </h2>
               <p className="pp-section-hint">
-                Сколько заданий ребёнок сделал за выбранный промежуток времени
+                Суммарное число попыток по задачам урока (без оценок и без
+                разбивки на верные и неверные)
               </p>
             </div>
             <div className="pp-section-body">
-              <div className="pp-chart-toolbar">
-                <div
-                  className="pp-period"
-                  role="group"
-                  aria-label="Период для диаграммы заданий"
-                >
-                  <span className="pp-period-legend">Период:</span>
-                  {PERIOD_KEYS.map((key) => (
-                    <button
-                      key={key}
-                      type="button"
-                      className={`pp-period-btn${period === key ? ' pp-period-btn--active' : ''}`}
-                      onClick={() => setPeriod(key)}
-                      aria-pressed={period === key}
-                    >
-                      {PERIOD_LABELS[key]}
-                    </button>
-                  ))}
+              <TasksBarChart
+                points={chartPoints}
+                caption="Все опубликованные уроки курса"
+                unit="попыток по уроку"
+              />
+            </div>
+          </section>
+
+          <h2 className="pp-block-title" style={{ marginTop: 8 }}>
+            Задания от учителя
+          </h2>
+          <p className="pp-block-lead">
+            Журнал: что выдал учитель классу и что сделал ребёнок — статус,
+            попытки и оценки (в том числе за блок, когда все задачи блока сданы).
+          </p>
+
+          {journalErr ? <p className="pp-gate-err">{journalErr}</p> : null}
+
+          {journalLoading ? (
+            <p className="pp-section-hint" style={{ margin: '0 0 16px' }}>
+              Загрузка журнала…
+            </p>
+          ) : null}
+
+          <section className="pp-section" aria-labelledby="pp-journal-title">
+            <div className="pp-section-head">
+              <h2 id="pp-journal-title" className="pp-section-title">
+                Журнал назначений
+              </h2>
+              <p className="pp-section-hint">
+                Строки по каждой задаче из класса. Блок — несколько задач с
+                общим комментарием и наградой.
+              </p>
+            </div>
+            <div className="pp-section-body">
+              {!journalLoading && journalRows.length === 0 && !journalErr ? (
+                <p className="pp-section-hint" style={{ margin: 0 }}>
+                  Пока нет назначений: ученик не в классе по приглашению или
+                  учитель ещё ничего не задавал.
+                </p>
+              ) : null}
+              {journalRows.length > 0 ? (
+                <div style={{ overflowX: 'auto' }}>
+                  <table className="pp-grades pp-journal-table">
+                    <thead>
+                      <tr>
+                        <th scope="col">Класс</th>
+                        <th scope="col">Урок</th>
+                        <th scope="col">Задание</th>
+                        <th scope="col">Выдано</th>
+                        <th scope="col">Блок</th>
+                        <th scope="col">Статус</th>
+                        <th scope="col">Попытки (верно / ошибок / всего)</th>
+                        <th scope="col">Оценка</th>
+                        <th scope="col">За блок</th>
+                        <th scope="col">Комментарий</th>
+                        <th scope="col">Бонус</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {journalRows.map((j) => (
+                        <tr key={j.assignment_id}>
+                          <td>{j.class_name}</td>
+                          <td>{j.lesson_title}</td>
+                          <td>{j.task_title || '—'}</td>
+                          <td>{formatAssignedAt(j.assigned_at)}</td>
+                          <td>
+                            {j.block_id != null &&
+                            j.position_in_block != null &&
+                            j.block_tasks_total != null
+                              ? `${j.position_in_block}/${j.block_tasks_total}`
+                              : '—'}
+                          </td>
+                          <td>{journalStatusRu(j.status)}</td>
+                          <td>
+                            {j.correct_attempts} / {j.wrong_attempts} /{' '}
+                            {j.total_attempts}
+                          </td>
+                          <td>
+                            {j.grade_2_5 != null ? j.grade_2_5 : '—'}
+                          </td>
+                          <td>
+                            {j.block_grade_2_5 != null ? j.block_grade_2_5 : '—'}
+                          </td>
+                          <td className="pp-journal-note">
+                            {j.note?.trim() ? j.note : '—'}
+                          </td>
+                          <td>{j.bonus_claimed ? 'да' : 'нет'}</td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
                 </div>
-                <span className="pp-chart-summary">
-                  Всего за период: <strong>{chartTotal}</strong>
-                </span>
-              </div>
-              <TasksBarChart periodKey={period} />
+              ) : null}
             </div>
           </section>
         </div>

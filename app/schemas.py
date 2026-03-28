@@ -76,11 +76,28 @@ class TeacherAssignTaskBody(BaseModel):
     reward_xp: int = Field(default=0, ge=0, le=1000, description="Бонус XP за верное решение (один раз)")
 
 
+class TeacherAssignBatchBody(BaseModel):
+    """Назначить классу сразу несколько задач (один урок или смешанный список id шаблонов)."""
+
+    task_template_ids: list[int] = Field(
+        min_length=1,
+        max_length=50,
+        description="Id шаблонов задач (дубликаты будут пропущены)",
+    )
+    note: str | None = Field(default=None, max_length=2000)
+    reward_coins: int = Field(default=0, ge=0, le=100)
+    reward_xp: int = Field(default=0, ge=0, le=1000)
+
+
 class AdminUserBody(BaseModel):
     login: str
     password: str
     display_name: str
     role: str
+
+
+class AdminPatchUserRoleBody(BaseModel):
+    role: str = Field(description="child | teacher | admin")
 
 
 class AdminLessonBody(BaseModel):
