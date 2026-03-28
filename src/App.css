@@ -96,11 +96,16 @@
 }
 
 .space-landing-title {
+  display: inline-block;
   margin: 0 0 16px;
+  padding: 12px 22px;
   font-size: clamp(1.75rem, 4vw, 2.5rem);
   font-weight: 700;
   letter-spacing: -0.03em;
-  color: var(--se-card);
+  color: var(--se-green-dark);
+  background: var(--se-card);
+  border-radius: 16px;
+  box-shadow: 0 8px 32px rgba(0, 0, 0, 0.2);
   line-height: 1.2;
 }
 

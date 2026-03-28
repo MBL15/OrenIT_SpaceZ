@@ -35,6 +35,15 @@ export function clearToken() {
   }
 }
 
+/** Список ачивок ученика: /me/achievements, при 404 — запасной /achievements. */
+export async function fetchStudentAchievements() {
+  let res = await apiFetch('/me/achievements')
+  if (res.status === 404) {
+    res = await apiFetch('/achievements')
+  }
+  return res
+}
+
 export async function apiFetch(path, options = {}) {
   const { skipAuth, ...init } = options
   const headers = new Headers(init.headers || {})

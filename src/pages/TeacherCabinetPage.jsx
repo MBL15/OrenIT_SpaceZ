@@ -10,6 +10,26 @@ function hwStatusLabel(status) {
   return 'Не начинал'
 }
 
+/** Локальная дата YYYY-MM-DD для сравнения с полями input type="date". */
+function createdAtLocalYmd(iso) {
+  if (iso == null || iso === '') return null
+  const d = new Date(iso)
+  if (Number.isNaN(d.getTime())) return null
+  const y = d.getFullYear()
+  const m = String(d.getMonth() + 1).padStart(2, '0')
+  const day = String(d.getDate()).padStart(2, '0')
+  return `${y}-${m}-${day}`
+}
+
+function hwRowMatchesDateRange(row, dateFrom, dateTo) {
+  if (!dateFrom && !dateTo) return true
+  const ymd = createdAtLocalYmd(row.created_at)
+  if (!ymd) return true
+  if (dateFrom && ymd < dateFrom) return false
+  if (dateTo && ymd > dateTo) return false
+  return true
+}
+
 export default function TeacherCabinetPage() {
   const { user } = useAuth()
   const [cabinetTab, setCabinetTab] = useState('class')
@@ -41,6 +61,24 @@ export default function TeacherCabinetPage() {
   const [hwProgressErr, setHwProgressErr] = useState('')
   const [deletingAssignmentId, setDeletingAssignmentId] = useState(null)
   const [deletingBlockId, setDeletingBlockId] = useState(null)
+  const [hwDateFrom, setHwDateFrom] = useState('')
+  const [hwDateTo, setHwDateTo] = useState('')
+
+  const filteredHwHistory = useMemo(() => {
+    let from = hwDateFrom
+    let to = hwDateTo
+    if (from && to && from > to) {
+      ;[from, to] = [to, from]
+    }
+    return hwHistory.filter((row) => hwRowMatchesDateRange(row, from, to))
+  }, [hwHistory, hwDateFrom, hwDateTo])
+
+  useEffect(() => {
+    setHwSelected((prev) => {
+      if (!prev) return prev
+      return filteredHwHistory.some((r) => r.id === prev.id) ? prev : null
+    })
+  }, [filteredHwHistory])
 
   /** Одна кнопка «Удалить весь блок» на блок: показываем у первой строки этого block_id в списке. */
   const blockDeleteAnchorId = useMemo(() => {
@@ -428,10 +466,53 @@ export default function TeacherCabinetPage() {
                 назначения».
               </p>
             ) : (
+              <>
+                <div
+                  className="cp-teacher-hw-filters"
+                  role="search"
+                  aria-label="Фильтр списка по дате назначения"
+                >
+                  <label className="cp-teacher-hw-filter-label">
+                    <span className="cp-teacher-hw-filter-text">С даты</span>
+                    <input
+                      type="date"
+                      className="cp-teacher-hw-date-input"
+                      value={hwDateFrom}
+                      onChange={(e) => setHwDateFrom(e.target.value)}
+                    />
+                  </label>
+                  <label className="cp-teacher-hw-filter-label">
+                    <span className="cp-teacher-hw-filter-text">По дату</span>
+                    <input
+                      type="date"
+                      className="cp-teacher-hw-date-input"
+                      value={hwDateTo}
+                      onChange={(e) => setHwDateTo(e.target.value)}
+                    />
+                  </label>
+                  {(hwDateFrom || hwDateTo) && (
+                    <button
+                      type="button"
+                      className="cp-teacher-hw-filter-reset"
+                      onClick={() => {
+                        setHwDateFrom('')
+                        setHwDateTo('')
+                      }}
+                    >
+                      Сбросить
+                    </button>
+                  )}
+                </div>
+                {filteredHwHistory.length === 0 ? (
+                  <p className="cp-teacher-muted" style={{ margin: '0 0 12px' }}>
+                    Нет записей за выбранные даты. Измените период или сбросьте
+                    фильтр.
+                  </p>
+                ) : (
               <div className="cp-teacher-hw-layout">
                 <div>
                   <ul className="cp-teacher-hw-list">
-                    {hwHistory.map((row) => (
+                    {filteredHwHistory.map((row) => (
                       <li key={row.id}>
                         <button
                           type="button"
@@ -540,6 +621,8 @@ export default function TeacherCabinetPage() {
                   )}
                 </div>
               </div>
+                )}
+              </>
             )}
           </div>
         ) : (

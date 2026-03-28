@@ -4,7 +4,7 @@ import { resolveArtemiySkin } from '../lib/mascotSkins.js'
 import './ArtemiySkinShopModal.css'
 
 const SLOT_LABEL = {
-  skin: 'Скины Артемия',
+  skin: 'Скины',
   hat: 'Головной убор',
   accessory: 'Аксессуар',
 }
@@ -16,6 +16,8 @@ export default function ArtemiySkinShopModal({
   onClose,
   userRole,
   onEconomyUpdated,
+  /** 'skin' | 'hat' | 'accessory' — прокрутить к секции при открытии */
+  focusSlot = null,
 }) {
   const [loading, setLoading] = useState(true)
   const [items, setItems] = useState([])
@@ -63,6 +65,15 @@ export default function ArtemiySkinShopModal({
     // eslint-disable-next-line react-hooks/set-state-in-effect -- загрузка каталога при открытии модалки
     void load()
   }, [open, load])
+
+  useEffect(() => {
+    if (!open || !focusSlot || loading) return
+    const t = window.setTimeout(() => {
+      const el = document.getElementById(`skin-shop-slot-${focusSlot}`)
+      el?.scrollIntoView({ behavior: 'smooth', block: 'start' })
+    }, 120)
+    return () => window.clearTimeout(t)
+  }, [open, focusSlot, loading])
 
   const ownedSet = new Set(mascot?.owned_item_ids ?? [])
   const equippedSkin = mascot?.skin_item_id ?? null
@@ -155,7 +166,7 @@ export default function ArtemiySkinShopModal({
         {userRole !== 'child' ? (
           <p className="skin-shop-note">
             Скины и монеты доступны в профиле ученика. Войдите как ученик, чтобы
-            покупать и менять облик Артемия.
+            покупать и менять облик маскота.
           </p>
         ) : loading ? (
           <p className="skin-shop-note">Загрузка…</p>
@@ -168,7 +179,7 @@ export default function ArtemiySkinShopModal({
             )}
             {error ? <p className="skin-shop-error">{error}</p> : null}
 
-            <section className="skin-shop-section">
+            <section className="skin-shop-section" id="skin-shop-slot-skin">
               <h3 className="skin-shop-slot-title">{SLOT_LABEL.skin}</h3>
               <ul className="skin-shop-grid">
                 <li className="skin-shop-card skin-shop-card--default">
@@ -243,7 +254,11 @@ export default function ArtemiySkinShopModal({
               const list = bySlot(slot)
               if (!list.length) return null
               return (
-                <section key={slot} className="skin-shop-section">
+                <section
+                  key={slot}
+                  className="skin-shop-section"
+                  id={`skin-shop-slot-${slot}`}
+                >
                   <h3 className="skin-shop-slot-title">{SLOT_LABEL[slot]}</h3>
                   <ul className="skin-shop-grid skin-shop-grid--compact">
                     {list.map((item) => {

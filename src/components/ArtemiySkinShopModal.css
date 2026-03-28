@@ -41,11 +41,13 @@
   z-index: 1;
 }
 
-.skin-shop-head h2 {
+.skin-shop-head h2,
+#skin-shop-title {
   margin: 0;
   font-size: 1.2rem;
   font-weight: 800;
   letter-spacing: -0.02em;
+  color: #1b5e20;
 }
 
 .skin-shop-close {

@@ -33,6 +33,26 @@ function journalStatusRu(status) {
   return 'Сдано верно'
 }
 
+/** Локальная дата YYYY-MM-DD для сравнения с полями input type="date". */
+function assignedAtLocalYmd(iso) {
+  if (iso == null || iso === '') return null
+  const d = new Date(iso)
+  if (Number.isNaN(d.getTime())) return null
+  const y = d.getFullYear()
+  const m = String(d.getMonth() + 1).padStart(2, '0')
+  const day = String(d.getDate()).padStart(2, '0')
+  return `${y}-${m}-${day}`
+}
+
+function journalRowMatchesDateRange(j, dateFrom, dateTo) {
+  if (!dateFrom && !dateTo) return true
+  const ymd = assignedAtLocalYmd(j.assigned_at)
+  if (!ymd) return true
+  if (dateFrom && ymd < dateFrom) return false
+  if (dateTo && ymd > dateTo) return false
+  return true
+}
+
 function TasksBarChart({ points, caption, unit }) {
   if (!points.length) {
     return (
@@ -137,6 +157,8 @@ export default function ParentsPage() {
   const [journalRows, setJournalRows] = useState([])
   const [journalLoading, setJournalLoading] = useState(false)
   const [journalErr, setJournalErr] = useState('')
+  const [journalDateFrom, setJournalDateFrom] = useState('')
+  const [journalDateTo, setJournalDateTo] = useState('')
 
   const loadProgress = useCallback(async () => {
     setProgressErr('')
@@ -191,6 +213,15 @@ export default function ParentsPage() {
       attempts,
     }
   }, [progressRows])
+
+  const filteredJournalRows = useMemo(() => {
+    let from = journalDateFrom
+    let to = journalDateTo
+    if (from && to && from > to) {
+      ;[from, to] = [to, from]
+    }
+    return journalRows.filter((j) => journalRowMatchesDateRange(j, from, to))
+  }, [journalRows, journalDateFrom, journalDateTo])
 
   const chartPoints = useMemo(
     () =>
@@ -406,6 +437,44 @@ export default function ParentsPage() {
                 общим комментарием и наградой.
               </p>
             </div>
+            {journalRows.length > 0 && !journalLoading ? (
+              <div
+                className="pp-journal-filters"
+                role="search"
+                aria-label="Фильтр журнала по дате выдачи"
+              >
+                <label className="pp-journal-filter-label">
+                  <span className="pp-journal-filter-text">С даты</span>
+                  <input
+                    type="date"
+                    className="pp-journal-date-input"
+                    value={journalDateFrom}
+                    onChange={(e) => setJournalDateFrom(e.target.value)}
+                  />
+                </label>
+                <label className="pp-journal-filter-label">
+                  <span className="pp-journal-filter-text">По дату</span>
+                  <input
+                    type="date"
+                    className="pp-journal-date-input"
+                    value={journalDateTo}
+                    onChange={(e) => setJournalDateTo(e.target.value)}
+                  />
+                </label>
+                {(journalDateFrom || journalDateTo) && (
+                  <button
+                    type="button"
+                    className="pp-journal-filter-reset"
+                    onClick={() => {
+                      setJournalDateFrom('')
+                      setJournalDateTo('')
+                    }}
+                  >
+                    Сбросить
+                  </button>
+                )}
+              </div>
+            ) : null}
             <div className="pp-section-body">
               {!journalLoading && journalRows.length === 0 && !journalErr ? (
                 <p className="pp-section-hint" style={{ margin: 0 }}>
@@ -413,7 +482,15 @@ export default function ParentsPage() {
                   учитель ещё ничего не задавал.
                 </p>
               ) : null}
-              {journalRows.length > 0 ? (
+              {!journalLoading &&
+              journalRows.length > 0 &&
+              filteredJournalRows.length === 0 ? (
+                <p className="pp-section-hint" style={{ margin: '0 0 12px' }}>
+                  Нет записей за выбранные даты. Измените период или сбросьте
+                  фильтр.
+                </p>
+              ) : null}
+              {journalRows.length > 0 && filteredJournalRows.length > 0 ? (
                 <div style={{ overflowX: 'auto' }}>
                   <table className="pp-grades pp-journal-table">
                     <thead>
@@ -432,7 +509,7 @@ export default function ParentsPage() {
                       </tr>
                     </thead>
                     <tbody>
-                      {journalRows.map((j) => (
+                      {filteredJournalRows.map((j) => (
                         <tr key={j.assignment_id}>
                           <td>{j.class_name}</td>
                           <td>{j.lesson_title}</td>

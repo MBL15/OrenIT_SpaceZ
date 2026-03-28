@@ -22,6 +22,7 @@ export default defineConfig({
       '/admin': { target: API, changeOrigin: true },
       '/classes': { target: API, changeOrigin: true },
       '/health': { target: API, changeOrigin: true },
+      '/achievements': { target: API, changeOrigin: true },
     },
   },
 })

@@ -2,11 +2,16 @@ from __future__ import annotations
 
 from contextlib import asynccontextmanager
 from pathlib import Path
+from typing import Annotated
 
-from fastapi import FastAPI
+from fastapi import Depends, FastAPI
 from fastapi.middleware.cors import CORSMiddleware
+from sqlalchemy.orm import Session
 
-from app.core import Base, SessionLocal, engine, get_settings
+from app.access import get_current_user
+from app.achievements import AchievementOut, achievements_for_child
+from app.core import Base, SessionLocal, engine, get_db, get_settings
+from app.models import User
 from parent_mode import parent_mode_router
 
 from app.routes_auth import auth_router, parent_router
@@ -63,6 +68,29 @@ app.include_router(learning_router)
 app.include_router(play_router)
 app.include_router(teacher_router)
 app.include_router(admin_router)
+
+
+def _achievements_payload(db: Session, user: User) -> list[AchievementOut]:
+    if user.role != "child":
+        return []
+    return achievements_for_child(db, user)
+
+
+@app.get("/me/achievements", response_model=list[AchievementOut], tags=["achievements"])
+def http_me_achievements(
+    db: Annotated[Session, Depends(get_db)],
+    user: Annotated[User, Depends(get_current_user)],
+) -> list[AchievementOut]:
+    return _achievements_payload(db, user)
+
+
+@app.get("/achievements", response_model=list[AchievementOut], tags=["achievements"])
+def http_achievements_alias(
+    db: Annotated[Session, Depends(get_db)],
+    user: Annotated[User, Depends(get_current_user)],
+) -> list[AchievementOut]:
+    """Тот же список, что /me/achievements — запасной путь для прокси."""
+    return _achievements_payload(db, user)
 
 
 @app.get("/health")

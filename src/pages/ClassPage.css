@@ -57,6 +57,7 @@
   font-size: 1.35rem;
   font-weight: 800;
   letter-spacing: -0.02em;
+  color: var(--cp-green-dark);
 }
 
 .cp-sub {
@@ -676,6 +677,67 @@
   color: #558b2f;
   line-height: 1.5;
   max-width: 52em;
+}
+
+.cp-teacher-hw-filters {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-end;
+  gap: 12px 16px;
+  margin: 0 0 16px;
+  padding: 12px 14px;
+  background: #f5f9f6;
+  border: 1px solid var(--cp-border);
+  border-radius: 10px;
+}
+
+.cp-teacher-hw-filter-label {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--cp-green-dark);
+}
+
+.cp-teacher-hw-filter-text {
+  font-size: 12px;
+  font-weight: 600;
+  color: #546e7a;
+}
+
+.cp-teacher-hw-date-input {
+  min-height: 36px;
+  padding: 6px 10px;
+  font-size: 14px;
+  font-family: inherit;
+  border: 1px solid var(--cp-border);
+  border-radius: 8px;
+  background: #fff;
+  color: #263238;
+}
+
+.cp-teacher-hw-date-input:focus {
+  outline: 2px solid var(--cp-green);
+  outline-offset: 1px;
+}
+
+.cp-teacher-hw-filter-reset {
+  align-self: center;
+  margin-left: auto;
+  padding: 6px 12px;
+  font-size: 13px;
+  font-weight: 600;
+  font-family: inherit;
+  color: var(--cp-green-dark);
+  background: #fff;
+  border: 1px solid var(--cp-border);
+  border-radius: 8px;
+  cursor: pointer;
+}
+
+.cp-teacher-hw-filter-reset:hover {
+  background: #eceff1;
 }
 
 .cp-teacher-hw-layout {

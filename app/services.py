@@ -117,24 +117,14 @@ def _now_iso() -> str:
     return datetime.now(timezone.utc).replace(microsecond=0).isoformat()
 
 
-# Пороги уровней: 1-й с 0 XP; 2-й с 100; далее шаг к следующему уровню +100 (+200, +300, …).
-_XP_PER_LEVEL_TIER = 100
-
-
-def min_xp_for_level(level: int) -> int:
-    """Минимум суммарного XP, чтобы находиться на уровне level (level 1 — с нуля)."""
-    if level <= 1:
-        return 0
-    return _XP_PER_LEVEL_TIER * (level - 1) * level // 2
+# Уровень 1 с 0 XP; каждые следующие 1000 XP — новый уровень (2-й с 1000 XP, 3-й с 2000, …).
+XP_PER_LEVEL = 1000
 
 
 def level_from_total_xp(xp: int) -> int:
     if xp < 0:
         xp = 0
-    level = 1
-    while min_xp_for_level(level + 1) <= xp:
-        level += 1
-    return level
+    return xp // XP_PER_LEVEL + 1
 
 
 def grant_lesson_completion_xp_if_eligible(

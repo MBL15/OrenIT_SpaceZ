@@ -384,21 +384,21 @@ export default function MainSite({ user, onLogout, onOpenParents }) {
             </div>
             <div className="ms-topbar-right">
               {user?.role === 'child' ? (
-                <Link className="ms-link" to="/app/class">
+                <Link className="ms-pill" to="/app/class">
                   Мой класс
                 </Link>
               ) : null}
               {user?.role === 'admin' ? (
-                <Link className="ms-link" to="/app/admin">
+                <Link className="ms-pill" to="/app/admin">
                   Админка
                 </Link>
               ) : null}
-              <Link className="ms-profile" to="/app/profile">
+              <Link className="ms-pill ms-pill--profile" to="/app/profile">
                 <span className="ms-avatar" aria-hidden />
                 <span>Мой профиль</span>
                 <IconChevron />
               </Link>
-              <button type="button" className="ms-btn-logout" onClick={onLogout}>
+              <button type="button" className="ms-pill" onClick={onLogout}>
                 Выйти
               </button>
             </div>

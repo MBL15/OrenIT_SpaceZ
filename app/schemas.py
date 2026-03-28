@@ -39,7 +39,7 @@ class UserPublic(BaseModel):
     )
     level: int | None = Field(
         default=None,
-        description="Уровень от суммарного XP (только для ученика)",
+        description="Уровень ученика: +1 каждые 1000 суммарного XP (начиная с 1 при 0 XP)",
     )
 
 
