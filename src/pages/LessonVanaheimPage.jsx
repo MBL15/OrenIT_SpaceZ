@@ -1,8 +1,10 @@
 import { useEffect, useMemo, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
-import vanaheimCutsceneBgUrl from '../assets/vanaheim-njord-cutscene.png'
 import { VANAHEIM_TASKS, VANAHEIM_TOTAL_TESTS_PER_TASK } from '../lib/vanaheimTasks.js'
 import { runPythonIOTests } from '../lib/runVanaheimPython.js'
+import { useAuth } from '../AuthContext.jsx'
+import { useArtemiySkin } from '../hooks/useArtemiySkin.js'
+import { lessonCutsceneBgUrl } from '../lib/lessonCutsceneBg.js'
 import './LessonAsgardPage.css'
 import './LessonJotunheimPage.css'
 import './LessonVanaheimPage.css'
@@ -79,6 +81,12 @@ function initialCodes() {
 
 export default function LessonVanaheimPage() {
   const navigate = useNavigate()
+  const { user } = useAuth()
+  const { skinItemId, shopItems } = useArtemiySkin()
+  const vanaCutsceneBgUrl = useMemo(
+    () => lessonCutsceneBgUrl('vanaheim', user?.role, skinItemId, shopItems),
+    [user?.role, skinItemId, shopItems],
+  )
   const [phase, setPhase] = useState('cutscene')
   const [cutsceneIndex, setCutsceneIndex] = useState(0)
   const [taskIndex, setTaskIndex] = useState(0)
@@ -370,7 +378,7 @@ export default function LessonVanaheimPage() {
 
               <div
                 className="jot-cutscene-stage"
-                style={{ backgroundImage: `url(${vanaheimCutsceneBgUrl})` }}
+                style={{ backgroundImage: `url(${vanaCutsceneBgUrl})` }}
                 onClick={() => {
                   if (!isLastOutro) goToNextOutro()
                 }}
@@ -426,7 +434,7 @@ export default function LessonVanaheimPage() {
 
             <div
               className="jot-cutscene-stage"
-              style={{ backgroundImage: `url(${vanaheimCutsceneBgUrl})` }}
+              style={{ backgroundImage: `url(${vanaCutsceneBgUrl})` }}
               onClick={goToNextReplica}
               role="presentation"
             >

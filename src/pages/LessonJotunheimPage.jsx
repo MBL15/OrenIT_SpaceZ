@@ -1,8 +1,10 @@
 import { useCallback, useEffect, useMemo, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
-import jotunheimCutsceneBgUrl from '../assets/jotunheim-alice-cutscene.png'
 import { JOTUNHEIM_QUIZ_SPEC, JOTUN_OPS } from '../lib/jotunheimQuizSpec.js'
 import { shuffleArray } from '../lib/shuffleQuizOptions.js'
+import { useAuth } from '../AuthContext.jsx'
+import { useArtemiySkin } from '../hooks/useArtemiySkin.js'
+import { lessonCutsceneBgUrl } from '../lib/lessonCutsceneBg.js'
 import './LessonAsgardPage.css'
 import './LessonJotunheimPage.css'
 
@@ -42,6 +44,12 @@ const OUTRO_LINES = [
 
 export default function LessonJotunheimPage() {
   const navigate = useNavigate()
+  const { user } = useAuth()
+  const { skinItemId, shopItems } = useArtemiySkin()
+  const jotunCutsceneBgUrl = useMemo(
+    () => lessonCutsceneBgUrl('jotunheim', user?.role, skinItemId, shopItems),
+    [user?.role, skinItemId, shopItems],
+  )
   /** cutscene | quiz | outro | success */
   const [view, setView] = useState('cutscene')
   const [cutsceneIndex, setCutsceneIndex] = useState(0)
@@ -178,7 +186,7 @@ export default function LessonJotunheimPage() {
 
               <div
                 className="jot-cutscene-stage"
-                style={{ backgroundImage: `url(${jotunheimCutsceneBgUrl})` }}
+                style={{ backgroundImage: `url(${jotunCutsceneBgUrl})` }}
                 onClick={goToNextOutro}
                 role="presentation"
               >
@@ -323,7 +331,7 @@ export default function LessonJotunheimPage() {
 
             <div
               className="jot-cutscene-stage"
-              style={{ backgroundImage: `url(${jotunheimCutsceneBgUrl})` }}
+              style={{ backgroundImage: `url(${jotunCutsceneBgUrl})` }}
               onClick={goToNextReplica}
               role="presentation"
             >

@@ -1,8 +1,6 @@
-import { useCallback, useEffect, useState } from 'react'
+import { useCallback, useEffect, useMemo, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
-import artemiyUrl from '../assets/artemiy.png'
 import odinUrl from '../assets/odin.png'
-import asgardCutsceneBgUrl from '../assets/asgard-cutscene-bg.png'
 import AsgardQuizEditorModal, {
   AsgardAdminPencilButton,
 } from '../components/AsgardQuizEditorModal.jsx'
@@ -15,6 +13,8 @@ import {
 } from '../lib/asgardQuizSpec.js'
 import { shuffleAllQuizSteps } from '../lib/shuffleQuizOptions.js'
 import { useDialogPresence } from '../hooks/useDialogPresence.js'
+import { useArtemiySkin } from '../hooks/useArtemiySkin.js'
+import { lessonCutsceneBgUrl } from '../lib/lessonCutsceneBg.js'
 import './LessonAsgardPage.css'
 
 const STORAGE_KEY = 'spaceedu-asgard-complete'
@@ -54,6 +54,11 @@ export default function LessonAsgardPage() {
   const navigate = useNavigate()
   const { user } = useAuth()
   const isAdmin = isAdminUser(user)
+  const { skinItemId, shopItems } = useArtemiySkin()
+  const asgardCutsceneBgUrl = useMemo(
+    () => lessonCutsceneBgUrl('asgard', user?.role, skinItemId, shopItems),
+    [user?.role, skinItemId, shopItems],
+  )
 
   const [quizSpec, setQuizSpec] = useState(() => loadAsgardQuizSpec())
   const [quizEditorOpen, setQuizEditorOpen] = useState(false)
@@ -326,7 +331,6 @@ export default function LessonAsgardPage() {
                 </div>
 
                 <div className="asg-actor asg-actor--right">
-                  <img src={artemiyUrl} alt="Артемий" />
                   {CUTSCENE_LINES[cutsceneIndex].side === 'right' ? (
                     <div className="asg-bubble asg-bubble--right">
                       {CUTSCENE_LINES[cutsceneIndex].text}
